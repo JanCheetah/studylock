@@ -1,5 +1,6 @@
 import type { RepositoryStatus } from '../../types'
 import { isSupabaseConfigured, supabase } from '../supabaseClient'
+import { syncSnapshotToRepository, type SyncCounts } from './sync'
 import { LocalStudyRepository } from './localStudyRepository'
 import { SupabaseStudyRepository } from './supabaseStudyRepository'
 import type { StudyRepository } from './studyRepository'
@@ -16,4 +17,12 @@ export async function getStudyRepository(): Promise<StudyRepository> {
   const cloudRepository = new SupabaseStudyRepository(supabase)
   const status = await cloudRepository.status()
   return status.authenticated ? cloudRepository : localStudyRepository
+}
+
+export async function syncLocalSnapshotToCloud(): Promise<SyncCounts> {
+  if (!isSupabaseConfigured || !supabase) throw new Error('Supabase ist nicht konfiguriert')
+  const cloudRepository = new SupabaseStudyRepository(supabase)
+  const status = await cloudRepository.status()
+  if (!status.authenticated) throw new Error('Bitte zuerst per Magic Link einloggen')
+  return syncSnapshotToRepository(localStudyRepository, cloudRepository)
 }

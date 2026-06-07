@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import type { Confidence, ExamGoal, ExamProfile, Mode, Rating, RepositoryStatus, SessionResult, SourceType, Step, StudyDocument, StudyItem } from './types'
+import { getAuthState, sendMagicLink, signOut, subscribeToAuthChanges, type AuthState } from './lib/auth'
 import { extractFileText } from './lib/pdf'
 import { safeParse, saveJson, storageKeys } from './lib/storage'
 import {
@@ -17,7 +18,7 @@ import {
   sampleText,
   selectSessionItems,
 } from './lib/studyEngine'
-import { getRepositoryStatus, getStudyRepository } from './lib/repositories'
+import { getRepositoryStatus, getStudyRepository, syncLocalSnapshotToCloud } from './lib/repositories'
 
 const goalLabels: Record<ExamGoal, string> = {
   bestehen: 'Nur bestehen',
@@ -46,6 +47,14 @@ const defaultRepositoryStatus: RepositoryStatus = {
   authenticated: true,
   label: 'Lokaler Modus',
   detail: 'Daten liegen im Browser-localStorage. Supabase ist vorbereitet, aber noch nicht aktiv.',
+}
+
+const defaultAuthState: AuthState = {
+  configured: false,
+  authenticated: false,
+  email: null,
+  label: 'Cloud Login aus',
+  detail: 'Ohne Supabase Env bleibt StudyLock lokal und friend-testbar.',
 }
 
 function persistRepositoryWrite(action: (repository: Awaited<ReturnType<typeof getStudyRepository>>) => Promise<void>) {
@@ -80,6 +89,11 @@ function App() {
   const [now, setNow] = useState(() => currentTimestamp())
   const [results, setResults] = useState<SessionResult[]>(() => safeParse(storageKeys.results, []))
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus>(defaultRepositoryStatus)
+  const [authState, setAuthState] = useState<AuthState>(defaultAuthState)
+  const [authEmail, setAuthEmail] = useState('')
+  const [authMessage, setAuthMessage] = useState('')
+  const [syncMessage, setSyncMessage] = useState('')
+  const [syncing, setSyncing] = useState(false)
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? null
   const activeExamProfile = examProfiles.find((profile) => profile.id === (activeDocument?.examProfileId ?? activeExamProfileId)) ?? null
@@ -102,18 +116,30 @@ function App() {
   useEffect(() => saveJson(storageKeys.activeDocument, activeDocumentId), [activeDocumentId])
   useEffect(() => saveJson(storageKeys.activeExamProfile, activeExamProfileId), [activeExamProfileId])
 
-  useEffect(() => {
-    void getRepositoryStatus().then((status) => {
+  const refreshCloudState = useCallback(async () => {
+    try {
+      const [status, auth] = await Promise.all([getRepositoryStatus(), getAuthState()])
       setRepositoryStatus(status)
+      setAuthState(auth)
       if (status.mode === 'supabase' && status.authenticated) {
-        void getStudyRepository().then((repository) => repository.loadSnapshot()).then((snapshot) => {
-          setDocuments(snapshot.documents)
-          setExamProfiles(snapshot.examProfiles)
-          setResults(snapshot.results)
-        })
+        const snapshot = await getStudyRepository().then((repository) => repository.loadSnapshot())
+        setDocuments(snapshot.documents)
+        setExamProfiles(snapshot.examProfiles)
+        setResults(snapshot.results)
       }
-    }).catch(() => setRepositoryStatus(defaultRepositoryStatus))
+    } catch (error) {
+      setRepositoryStatus(defaultRepositoryStatus)
+      setAuthState(defaultAuthState)
+      setAuthMessage(error instanceof Error ? error.message : 'Cloud Status konnte nicht geladen werden')
+    }
   }, [])
+
+  useEffect(() => {
+    void Promise.resolve().then(refreshCloudState)
+    return subscribeToAuthChanges(() => {
+      void refreshCloudState()
+    })
+  }, [refreshCloudState])
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(currentTimestamp()), 1000)
@@ -273,6 +299,41 @@ function App() {
     if (activeDocumentId === documentId) setActiveDocumentId(null)
   }
 
+  async function handleMagicLinkSubmit() {
+    setAuthMessage('Sende Magic Link ...')
+    try {
+      await sendMagicLink(authEmail)
+      setAuthMessage('Magic Link gesendet. Mail öffnen, danach kommt StudyLock automatisch zurück.')
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Magic Link konnte nicht gesendet werden')
+    }
+  }
+
+  async function handleSignOut() {
+    setAuthMessage('Logge aus ...')
+    try {
+      await signOut()
+      await refreshCloudState()
+      setAuthMessage('Ausgeloggt. Neue Änderungen bleiben lokal, bis du wieder syncst.')
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Logout fehlgeschlagen')
+    }
+  }
+
+  async function handleCloudSync() {
+    setSyncing(true)
+    setSyncMessage('Synchronisiere lokale Daten in Supabase ...')
+    try {
+      const counts = await syncLocalSnapshotToCloud()
+      await refreshCloudState()
+      setSyncMessage(`${counts.documents} Dokumente, ${counts.examProfiles} Klausurprofile und ${counts.results} Sessions in die Cloud gesynct.`)
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'Cloud Sync fehlgeschlagen')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
   const canShowExamRating = mode !== 'exam' || (activeItem && (answers[activeItem.id] ?? '').trim().length >= 30)
 
@@ -309,6 +370,26 @@ function App() {
             <strong>{repositoryStatus.label}</strong>
             <small>{repositoryStatus.detail}</small>
           </div>
+
+          {authState.configured && (
+            <div className="auth-card">
+              <span>Cloud Account</span>
+              <strong>{authState.label}</strong>
+              <small>{authState.detail}</small>
+              {!authState.authenticated ? (
+                <div className="auth-form">
+                  <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="deine@mail.de" />
+                  <button className="secondary mini" onClick={handleMagicLinkSubmit}>Magic Link senden</button>
+                </div>
+              ) : (
+                <div className="auth-form">
+                  <button className="secondary mini" onClick={handleCloudSync} disabled={syncing}>{syncing ? 'Sync läuft ...' : 'Lokale Daten in Cloud syncen'}</button>
+                  <button className="secondary mini" onClick={handleSignOut}>Logout</button>
+                </div>
+              )}
+              {(authMessage || syncMessage) && <small className="status-line">{syncMessage || authMessage}</small>}
+            </div>
+          )}
 
           {activeExamProfile && (
             <div className="profile-card">

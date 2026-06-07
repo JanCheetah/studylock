@@ -179,6 +179,7 @@ h3 {
 .active-doc,
 .profile-card,
 .storage-card,
+.auth-card,
 .weakness,
 .plan-card {
   min-height: 84px;
@@ -202,6 +203,8 @@ h3 {
 .profile-card small,
 .storage-card span,
 .storage-card small,
+.auth-card span,
+.auth-card small,
 .weakness small,
 .plan-card small,
 .decision-box small {
@@ -256,6 +259,37 @@ h3 {
 .storage-card.supabase {
   border-color: rgba(0, 209, 178, 0.45);
   background: rgba(0, 209, 178, 0.1);
+}
+
+.auth-card {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+  border-color: rgba(0, 209, 178, 0.28);
+  background: linear-gradient(135deg, rgba(0, 209, 178, 0.12), rgba(124, 92, 255, 0.08));
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.auth-form input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 0.7rem 0.85rem;
+  color: #eef2ff;
+  background: rgba(3, 7, 18, 0.52);
+}
+
+.auth-form button.mini {
+  margin-top: 0;
+}
+
+.status-line {
+  color: #6fffe2 !important;
 }
 
 .weakness {

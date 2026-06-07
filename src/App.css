@@ -25,6 +25,7 @@ button {
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 16px 35px rgba(0, 209, 178, 0.18);
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
 button:hover {
@@ -41,6 +42,11 @@ button.secondary {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: none;
+}
+
+button.danger {
+  color: #ffb4b4;
+  border-color: rgba(255, 83, 83, 0.35);
 }
 
 .app-shell {
@@ -99,9 +105,9 @@ p {
 }
 
 h1 {
-  max-width: 900px;
+  max-width: 940px;
   margin: 1rem 0;
-  font-size: clamp(2.5rem, 8vw, 5.6rem);
+  font-size: clamp(2.35rem, 7vw, 5.4rem);
   line-height: 0.92;
   letter-spacing: -0.07em;
 }
@@ -114,21 +120,27 @@ h2 {
 
 .hero-card p,
 .muted {
-  max-width: 760px;
+  max-width: 800px;
   color: #b8c0d9;
 }
 
 .hero-actions,
-.session-actions {
+.session-actions,
+.library-actions {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
   margin-top: 1.2rem;
 }
 
+.library-actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1rem;
+}
+
 .grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 350px 1fr;
   gap: 1rem;
 }
 
@@ -142,21 +154,6 @@ h2 {
   top: 1rem;
 }
 
-.rules {
-  display: grid;
-  gap: 0.7rem;
-  padding: 0;
-  margin: 1rem 0;
-  list-style: none;
-}
-
-.rules li {
-  padding: 0.8rem;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #d8def3;
-}
-
 .metric-row,
 .recap-grid {
   display: grid;
@@ -166,7 +163,8 @@ h2 {
 }
 
 .metric-row div,
-.recap {
+.recap,
+.active-doc {
   min-height: 84px;
   border-radius: 20px;
   padding: 0.9rem;
@@ -181,9 +179,38 @@ h2 {
 
 .metric-row span,
 .recap span,
-.recap small {
+.recap small,
+.active-doc span {
   display: block;
   color: #9aa5c1;
+  font-size: 0.86rem;
+}
+
+.doc-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.doc-card {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  text-align: left;
+  border-radius: 18px;
+  color: #eef2ff;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: none;
+}
+
+.doc-card.active {
+  border-color: rgba(0, 209, 178, 0.7);
+  background: rgba(0, 209, 178, 0.13);
+}
+
+.doc-card span {
+  color: #aab5d0;
   font-size: 0.86rem;
 }
 
@@ -218,8 +245,20 @@ textarea {
 }
 
 textarea {
-  min-height: 180px;
+  min-height: 210px;
   resize: vertical;
+}
+
+.file-drop {
+  border: 1px dashed rgba(0, 209, 178, 0.45);
+  border-radius: 24px;
+  padding: 1rem;
+  background: rgba(0, 209, 178, 0.07);
+}
+
+.file-drop input {
+  margin-top: 0.55rem;
+  padding: 0.75rem;
 }
 
 .mode-grid {
@@ -228,10 +267,14 @@ textarea {
   gap: 0.7rem;
 }
 
+.mode-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .mode {
   display: grid;
   gap: 0.3rem;
-  min-height: 116px;
+  min-height: 110px;
   padding: 0.85rem;
   text-align: left;
   border-radius: 22px;
@@ -260,16 +303,35 @@ textarea {
   background: rgba(0, 209, 178, 0.08);
 }
 
-.session-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
+.decision-box.compact {
+  margin-top: 1rem;
+  color: #dce4ff;
 }
 
-.progress {
+.session-top,
+.question-meta,
+.rating-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timer {
+  font-size: 1.6rem;
+  font-weight: 950;
   color: #6fffe2;
-  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.question-meta span {
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c5cdeb;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .progressbar {
@@ -296,8 +358,33 @@ textarea {
 }
 
 .solution p {
-  margin: 0.8rem 0;
+  margin: 0.8rem 0 0;
   color: #dce4ff;
+}
+
+.rating-row {
+  justify-content: flex-start;
+}
+
+.rating {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.rating.active {
+  border-color: #fbbf24;
+  background: rgba(251, 191, 36, 0.18);
+}
+
+.rating.good.active {
+  border-color: #00d1b2;
+  background: rgba(0, 209, 178, 0.18);
+}
+
+.rating.bad.active {
+  border-color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.18);
 }
 
 .chips {
@@ -325,10 +412,11 @@ textarea {
   color: #c2cbe4;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 950px) {
   .grid,
   .form-grid,
-  .mode-grid {
+  .mode-grid,
+  .mode-grid.four {
     grid-template-columns: 1fr;
   }
 

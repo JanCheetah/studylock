@@ -22,7 +22,7 @@ button {
   padding: 0.9rem 1.15rem;
   background: linear-gradient(135deg, #7c5cff, #00d1b2);
   color: #fff;
-  font-weight: 800;
+  font-weight: 850;
   cursor: pointer;
   box-shadow: 0 16px 35px rgba(0, 209, 178, 0.18);
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
@@ -49,8 +49,14 @@ button.danger {
   border-color: rgba(255, 83, 83, 0.35);
 }
 
+button.mini {
+  width: fit-content;
+  padding: 0.55rem 0.8rem;
+  margin-top: 0.8rem;
+}
+
 .app-shell {
-  width: min(1180px, calc(100vw - 28px));
+  width: min(1240px, calc(100vw - 28px));
   margin: 0 auto;
   padding: 2rem 0 4rem;
   color: #eef2ff;
@@ -93,19 +99,20 @@ button.danger {
   color: #6fffe2;
   background: rgba(0, 209, 178, 0.08);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 h1,
 h2,
+h3,
 p {
   margin-top: 0;
 }
 
 h1 {
-  max-width: 940px;
+  max-width: 960px;
   margin: 1rem 0;
   font-size: clamp(2.35rem, 7vw, 5.4rem);
   line-height: 0.92;
@@ -118,9 +125,14 @@ h2 {
   letter-spacing: -0.04em;
 }
 
+h3 {
+  margin-bottom: 0.8rem;
+  font-size: 1rem;
+}
+
 .hero-card p,
 .muted {
-  max-width: 800px;
+  max-width: 840px;
   color: #b8c0d9;
 }
 
@@ -140,7 +152,7 @@ h2 {
 
 .grid {
   display: grid;
-  grid-template-columns: 350px 1fr;
+  grid-template-columns: 370px 1fr;
   gap: 1rem;
 }
 
@@ -164,7 +176,10 @@ h2 {
 
 .metric-row div,
 .recap,
-.active-doc {
+.active-doc,
+.profile-card,
+.weakness,
+.plan-card {
   min-height: 84px;
   border-radius: 20px;
   padding: 0.9rem;
@@ -175,18 +190,25 @@ h2 {
 .metric-row strong {
   display: block;
   font-size: 2rem;
+  line-height: 1;
 }
 
 .metric-row span,
 .recap span,
 .recap small,
-.active-doc span {
+.active-doc span,
+.profile-card span,
+.profile-card small,
+.weakness small,
+.plan-card small,
+.decision-box small {
   display: block;
   color: #9aa5c1;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
 }
 
-.doc-list {
+.doc-list,
+.weakness-box {
   display: grid;
   gap: 0.65rem;
   margin-top: 1rem;
@@ -214,6 +236,23 @@ h2 {
   font-size: 0.86rem;
 }
 
+.profile-card {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+}
+
+.weakness {
+  min-height: unset;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.6rem;
+}
+
+.weakness small {
+  grid-column: 1 / -1;
+}
+
 .flow {
   display: grid;
   gap: 1rem;
@@ -229,7 +268,7 @@ label {
   display: grid;
   gap: 0.4rem;
   color: #cdd5ef;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 input,
@@ -242,6 +281,10 @@ textarea {
   background: rgba(5, 8, 14, 0.82);
   color: #eef2ff;
   outline: none;
+}
+
+input[type='range'] {
+  accent-color: #00d1b2;
 }
 
 textarea {
@@ -296,7 +339,8 @@ textarea {
 
 .decision-box,
 .blocker-box,
-.solution {
+.solution,
+.panic-card {
   border: 1px solid rgba(0, 209, 178, 0.24);
   border-radius: 22px;
   padding: 1rem;
@@ -305,6 +349,36 @@ textarea {
 
 .decision-box.compact {
   margin-top: 1rem;
+  color: #dce4ff;
+}
+
+.decision-box.panic,
+.plan-card.panic,
+.panic-card {
+  border-color: rgba(255, 154, 60, 0.48);
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.16), rgba(251, 191, 36, 0.1));
+}
+
+.decision-box.review,
+.plan-card.review {
+  border-color: rgba(124, 92, 255, 0.5);
+  background: rgba(124, 92, 255, 0.12);
+}
+
+.plan-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.42fr) 1fr;
+  gap: 1rem;
+  align-items: center;
+}
+
+.plan-card strong {
+  display: block;
+  font-size: 1.7rem;
+}
+
+.plan-card p {
+  margin: 0;
   color: #dce4ff;
 }
 
@@ -416,7 +490,8 @@ textarea {
   .grid,
   .form-grid,
   .mode-grid,
-  .mode-grid.four {
+  .mode-grid.four,
+  .plan-card {
     grid-template-columns: 1fr;
   }
 

@@ -1,180 +1,43 @@
-import { useEffect, useMemo, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
+import { useEffect, useState } from 'react'
 import './App.css'
+import type { Confidence, ExamGoal, ExamProfile, Mode, Rating, SessionResult, Step, StudyDocument, StudyItem } from './types'
+import { extractFileText } from './lib/pdf'
+import { safeParse, saveJson, storageKeys } from './lib/storage'
+import {
+  buildDailyPlan,
+  buildItems,
+  buildTopicStats,
+  calculateReadiness,
+  download,
+  id,
+  modeLabels,
+  nextDueDate,
+  normalizeText,
+  readinessLabel,
+  sampleText,
+  selectSessionItems,
+} from './lib/studyEngine'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString()
-
-type Mode = 'recall' | 'deepwork' | 'review' | 'exam'
-type Step = 'checkin' | 'material' | 'session' | 'done'
-type Difficulty = 'leicht' | 'mittel' | 'hart'
-type Rating = 'again' | 'hard' | 'good'
-
-type StudyItem = {
-  id: string
-  documentId: string
-  question: string
-  answer: string
-  source: string
-  difficulty: Difficulty
-  type: 'karte' | 'quiz' | 'aufgabe'
-  dueAt: string
-  intervalDays: number
-  repetitions: number
+const goalLabels: Record<ExamGoal, string> = {
+  bestehen: 'Nur bestehen',
+  gut: '2,x schaffen',
+  'sehr-gut': '1,x angreifen',
 }
 
-type StudyDocument = {
-  id: string
-  title: string
-  subject: string
-  text: string
-  createdAt: string
-  updatedAt: string
-  items: StudyItem[]
+const blockerActions: Record<string, string> = {
+  'Zu schwer': 'Beantworte nur den ersten Teilsatz. Eine halbe Antwort zählt mehr als Flucht.',
+  'Keine Motivation': '2-Minuten-Regel: Schreibe einen Mini-Satz, dann darfst du neu entscheiden.',
+  'Verstehe es nicht': 'Markiere die unklaren Begriffe und formuliere eine konkrete Rückfrage.',
+  Ablenkung: 'Timer läuft weiter. Tab nicht wechseln. Schreibe den nächsten Satz.',
 }
 
-type SessionResult = {
-  id: string
-  date: string
-  subject: string
-  documentTitle: string
-  mode: Mode
-  score: number
-  minutes: number
-  answered: number
+const todayPlus = (days: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
-const modeLabels: Record<Mode, string> = {
-  recall: 'Active Recall',
-  deepwork: 'Deep Work',
-  review: 'Review',
-  exam: 'Exam Mode',
-}
-
-const sampleText = `Aktivkonten mehren sich im Soll und mindern sich im Haben. Passivkonten mehren sich im Haben und mindern sich im Soll. Die Gewinn- und Verlustrechnung sammelt Aufwendungen und Erträge und zeigt den Periodenerfolg. Buchungssätze folgen dem Prinzip Soll an Haben. Eine Bilanz zeigt Vermögen auf der Aktivseite und Kapital auf der Passivseite.`
-
-function safeParse<T>(key: string, fallback: T): T {
-  try {
-    const saved = localStorage.getItem(key)
-    return saved ? (JSON.parse(saved) as T) : fallback
-  } catch {
-    return fallback
-  }
-}
-
-function id(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
-}
-
-function normalizeText(text: string) {
-  return text.replace(/\s+/g, ' ').trim()
-}
-
-function splitIntoChunks(text: string) {
-  const clean = normalizeText(text)
-  if (!clean) return []
-
-  const sentences = clean
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 24)
-
-  const chunks: string[] = []
-  let buffer = ''
-  for (const sentence of sentences) {
-    const next = `${buffer} ${sentence}`.trim()
-    if (next.length > 260 && buffer) {
-      chunks.push(buffer)
-      buffer = sentence
-    } else {
-      buffer = next
-    }
-  }
-  if (buffer) chunks.push(buffer)
-  return chunks.slice(0, 12)
-}
-
-function extractTerms(chunk: string) {
-  const stop = new Set(['diese', 'dieser', 'dieses', 'einem', 'einen', 'einer', 'nicht', 'werden', 'durch', 'sind', 'oder', 'aber', 'auch', 'dass', 'eine', 'eines', 'wird', 'haben', 'sich'])
-  return Array.from(new Set(chunk
-    .replace(/[^\p{L}\p{N}äöüÄÖÜß\s-]/gu, '')
-    .split(/\s+/)
-    .filter((word) => word.length > 6 && !stop.has(word.toLowerCase()))))
-    .slice(0, 4)
-}
-
-function buildItems(documentId: string, subject: string, text: string): StudyItem[] {
-  const chunks = splitIntoChunks(text)
-  const now = new Date().toISOString()
-  if (!chunks.length) return []
-
-  return chunks.flatMap((chunk, index) => {
-    const terms = extractTerms(chunk)
-    const termLabel = terms.join(', ') || 'Kernkonzept'
-    const base = `${documentId}-${index}`
-    const difficulty: Difficulty = chunk.length > 210 ? 'hart' : index % 2 ? 'mittel' : 'leicht'
-
-    return [
-      {
-        id: `${base}-recall`,
-        documentId,
-        question: `Erkläre für ${subject} in eigenen Worten: ${termLabel}`,
-        answer: chunk,
-        source: `Abschnitt ${index + 1}`,
-        difficulty,
-        type: 'karte' as const,
-        dueAt: now,
-        intervalDays: 0,
-        repetitions: 0,
-      },
-      {
-        id: `${base}-exam`,
-        documentId,
-        question: `Welche Klausurfrage könnte zu diesem Abschnitt kommen — und wie würdest du sie beantworten?`,
-        answer: chunk,
-        source: `Abschnitt ${index + 1}`,
-        difficulty: (index % 3 === 0 ? 'hart' : 'mittel') as Difficulty,
-        type: 'quiz' as const,
-        dueAt: now,
-        intervalDays: 0,
-        repetitions: 0,
-      },
-    ]
-  }).slice(0, 24)
-}
-
-function nextDueDate(item: StudyItem, rating: Rating) {
-  const next = new Date()
-  const interval = rating === 'again' ? 0 : rating === 'hard' ? Math.max(1, item.intervalDays || 1) : Math.max(1, (item.intervalDays || 1) * 2)
-  if (rating === 'again') next.setHours(next.getHours() + 4)
-  else next.setDate(next.getDate() + interval)
-  return { dueAt: next.toISOString(), intervalDays: interval, repetitions: item.repetitions + (rating === 'again' ? 0 : 1) }
-}
-
-function download(filename: string, content: string, type = 'text/plain') {
-  const blob = new Blob([content], { type })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
-}
-
-async function extractFileText(file: File) {
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-    const buffer = await file.arrayBuffer()
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise
-    const pages: string[] = []
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber)
-      const content = await page.getTextContent()
-      const text = content.items.map((item: unknown) => (item as { str?: string }).str ?? '').join(' ')
-      pages.push(`[Seite ${pageNumber}] ${text}`)
-    }
-    return pages.join('\n\n')
-  }
-  return file.text()
-}
+const currentTimestamp = () => Date.now()
 
 function App() {
   const [step, setStep] = useState<Step>('checkin')
@@ -183,55 +46,49 @@ function App() {
   const [mode, setMode] = useState<Mode>('recall')
   const [documentTitle, setDocumentTitle] = useState('Mein Skript')
   const [material, setMaterial] = useState(sampleText)
-  const [documents, setDocuments] = useState<StudyDocument[]>(() => safeParse('studylock-documents', []))
-  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(() => safeParse<string | null>('studylock-active-document', null))
+  const [documents, setDocuments] = useState<StudyDocument[]>(() => safeParse(storageKeys.documents, []))
+  const [activeDocumentId, setActiveDocumentId] = useState<string | null>(() => safeParse<string | null>(storageKeys.activeDocument, null))
+  const [examProfiles, setExamProfiles] = useState<ExamProfile[]>(() => safeParse(storageKeys.examProfiles, []))
+  const [activeExamProfileId, setActiveExamProfileId] = useState<string | null>(() => safeParse<string | null>(storageKeys.activeExamProfile, null))
+  const [examDate, setExamDate] = useState(todayPlus(21))
+  const [examGoal, setExamGoal] = useState<ExamGoal>('bestehen')
+  const [confidence, setConfidence] = useState<Confidence>(2)
   const [items, setItems] = useState<StudyItem[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [ratings, setRatings] = useState<Record<string, Rating>>({})
   const [blockedReason, setBlockedReason] = useState('')
+  const [blockerCount, setBlockerCount] = useState(0)
   const [fileStatus, setFileStatus] = useState('')
   const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [now, setNow] = useState(Date.now())
-  const [results, setResults] = useState<SessionResult[]>(() => safeParse('studylock-results', []))
+  const [now, setNow] = useState(() => currentTimestamp())
+  const [results, setResults] = useState<SessionResult[]>(() => safeParse(storageKeys.results, []))
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? null
+  const activeExamProfile = examProfiles.find((profile) => profile.id === (activeDocument?.examProfileId ?? activeExamProfileId)) ?? null
   const activeItem = items[currentIndex]
   const answeredCount = Object.values(answers).filter((value) => value.trim().length > 8).length
   const ratedCount = Object.keys(ratings).length
-  const score = Math.round(((answeredCount + ratedCount) / Math.max(items.length * 2, 1)) * 100)
+  const sessionScore = Math.round(((answeredCount + ratedCount) / Math.max(items.length * 2, 1)) * 100)
   const elapsedSeconds = startedAt ? Math.floor((now - startedAt) / 1000) : 0
   const remainingSeconds = Math.max(minutes * 60 - elapsedSeconds, 0)
   const progress = Math.round(((currentIndex + 1) / Math.max(items.length, 1)) * 100)
-  const dueCount = activeDocument?.items.filter((item) => new Date(item.dueAt).getTime() <= Date.now()).length ?? 0
+  const dueCount = activeDocument?.items.filter((item) => new Date(item.dueAt).getTime() <= now).length ?? 0
+  const readiness = activeDocument ? calculateReadiness(activeDocument.items) : 0
+  const topicStats = activeDocument ? buildTopicStats(activeDocument.items) : []
+  const weakestTopics = topicStats.slice(0, 3)
+  const dailyPlan = buildDailyPlan(activeExamProfile, dueCount, activeDocument?.items.length ?? 0)
+
+  useEffect(() => saveJson(storageKeys.documents, documents), [documents])
+  useEffect(() => saveJson(storageKeys.examProfiles, examProfiles), [examProfiles])
+  useEffect(() => saveJson(storageKeys.results, results), [results])
+  useEffect(() => saveJson(storageKeys.activeDocument, activeDocumentId), [activeDocumentId])
+  useEffect(() => saveJson(storageKeys.activeExamProfile, activeExamProfileId), [activeExamProfileId])
 
   useEffect(() => {
-    localStorage.setItem('studylock-documents', JSON.stringify(documents))
-  }, [documents])
-
-  useEffect(() => {
-    localStorage.setItem('studylock-results', JSON.stringify(results))
-  }, [results])
-
-  useEffect(() => {
-    localStorage.setItem('studylock-active-document', JSON.stringify(activeDocumentId))
-  }, [activeDocumentId])
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    const interval = window.setInterval(() => setNow(currentTimestamp()), 1000)
     return () => window.clearInterval(interval)
   }, [])
-
-  useEffect(() => {
-    if (remainingSeconds === 0 && startedAt && step === 'session') finishSession()
-  }, [remainingSeconds, startedAt, step])
-
-  const nextAction = useMemo(() => {
-    if (!activeDocument) return 'Erstelle zuerst ein Dokument aus PDF/Text.'
-    if (dueCount > 0) return `${dueCount} fällige Fragen wiederholen. Keine neuen Notizen.`
-    if (mode === 'exam') return 'Klausurmodus: beantworten, dann erst Musterlösung.'
-    return 'Active Recall starten: eine Frage, eine Antwort, eine Bewertung.'
-  }, [activeDocument, dueCount, mode])
 
   function upsertDocument(text = material) {
     const clean = normalizeText(text)
@@ -242,13 +99,14 @@ function App() {
       title: documentTitle || 'Unbenanntes Skript',
       subject,
       text: clean,
+      examProfileId: activeExamProfileId ?? undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       items: buildItems(docId, subject, clean),
     }
     setDocuments((prev) => [newDocument, ...prev])
     setActiveDocumentId(docId)
-    setStep('checkin')
+    setStep('exam-setup')
   }
 
   async function handleFile(file: File | undefined) {
@@ -264,23 +122,56 @@ function App() {
     }
   }
 
-  function startSession(selectedMode = mode) {
+  function saveExamProfile() {
+    const profileId = activeExamProfile?.id ?? id('exam')
+    const profile: ExamProfile = {
+      id: profileId,
+      subject,
+      examDate,
+      dailyMinutes: minutes,
+      goal: examGoal,
+      confidence,
+      createdAt: activeExamProfile?.createdAt ?? new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    setExamProfiles((prev) => [profile, ...prev.filter((item) => item.id !== profileId)])
+    setActiveExamProfileId(profileId)
+    setDocuments((prev) => prev.map((doc) => doc.id === activeDocumentId ? { ...doc, subject, examProfileId: profileId, updatedAt: new Date().toISOString() } : doc))
+    setStep('checkin')
+  }
+
+  function hydrateExamForm() {
+    setSubject(activeDocument?.subject ?? subject)
+    if (activeExamProfile) {
+      setExamDate(activeExamProfile.examDate)
+      setExamGoal(activeExamProfile.goal)
+      setConfidence(activeExamProfile.confidence)
+      setMinutes(activeExamProfile.dailyMinutes)
+    }
+    setStep('exam-setup')
+  }
+
+  function startSession(selectedMode = dailyPlan.mode, overrideTarget = dailyPlan.targetItems) {
     const doc = activeDocument
     if (!doc) {
       setStep('material')
       return
     }
-    const dueItems = doc.items.filter((item) => new Date(item.dueAt).getTime() <= Date.now())
-    const pool = selectedMode === 'review' ? dueItems : selectedMode === 'exam' ? doc.items.filter((item) => item.type === 'quiz') : doc.items
-    const sessionItems = (pool.length ? pool : doc.items).slice(0, selectedMode === 'exam' ? 10 : 8)
+    const sessionItems = selectSessionItems(doc, selectedMode, overrideTarget)
     setMode(selectedMode)
+    setMinutes(dailyPlan.priority === 'panic' ? Math.max(minutes, dailyPlan.minutes) : minutes)
     setItems(sessionItems)
     setCurrentIndex(0)
     setAnswers({})
     setRatings({})
     setBlockedReason('')
-    setStartedAt(Date.now())
+    setBlockerCount(0)
+    setStartedAt(currentTimestamp())
     setStep('session')
+  }
+
+  function startPanicSession() {
+    startSession('exam', 12)
   }
 
   function rateItem(itemId: string, rating: Rating) {
@@ -291,6 +182,19 @@ function App() {
     })))
   }
 
+  function registerBlocker(reason: string) {
+    setBlockedReason(reason)
+    setBlockerCount((count) => count + 1)
+  }
+
+  function insertMiniAnswer() {
+    if (!activeItem) return
+    setAnswers((prev) => ({
+      ...prev,
+      [activeItem.id]: `${prev[activeItem.id] ?? ''}${prev[activeItem.id] ? '\n' : ''}Mein erster Ansatz: ${activeItem.topic} bedeutet hier, dass ...`,
+    }))
+  }
+
   function finishSession() {
     if (!activeDocument) return
     const result: SessionResult = {
@@ -299,24 +203,26 @@ function App() {
       subject: activeDocument.subject,
       documentTitle: activeDocument.title,
       mode,
-      score,
+      score: sessionScore,
       minutes,
       answered: answeredCount,
+      blockers: blockerCount,
+      readinessAfter: calculateReadiness(activeDocument.items),
     }
     setStartedAt(null)
-    setResults((prev) => [result, ...prev].slice(0, 8))
+    setResults((prev) => [result, ...prev].slice(0, 10))
     setStep('done')
   }
 
   function exportMarkdown(doc = activeDocument) {
     if (!doc) return
-    const content = `# ${doc.title}\n\nFach: ${doc.subject}\n\n## Lernfragen\n\n${doc.items.map((item, index) => `### ${index + 1}. ${item.question}\n\nAntwort/Quelle: ${item.answer}\n\n- Typ: ${item.type}\n- Schwierigkeit: ${item.difficulty}\n- Fällig: ${new Date(item.dueAt).toLocaleDateString('de-DE')}\n`).join('\n')}`
+    const content = `# ${doc.title}\n\nFach: ${doc.subject}\nReadiness: ${calculateReadiness(doc.items)}%\n\n## Lernfragen\n\n${doc.items.map((item, index) => `### ${index + 1}. ${item.question}\n\nAntwort/Quelle: ${item.answer}\n\n- Thema: ${item.topic}\n- Typ: ${item.type}\n- Schwierigkeit: ${item.difficulty}\n- Letzte Bewertung: ${item.lastRating ?? 'offen'}\n- Fällig: ${new Date(item.dueAt).toLocaleDateString('de-DE')}\n`).join('\n')}`
     download(`${doc.title}-studylock.md`, content, 'text/markdown')
   }
 
   function exportAnki(doc = activeDocument) {
     if (!doc) return
-    const rows = doc.items.map((item) => `"${item.question.replaceAll('"', '""')}";"${item.answer.replaceAll('"', '""')}";"${doc.subject}"`)
+    const rows = doc.items.map((item) => `"${item.question.replaceAll('"', '""')}";"${item.answer.replaceAll('"', '""')}";"${doc.subject};${item.topic}"`)
     download(`${doc.title}-anki.csv`, rows.join('\n'), 'text/csv')
   }
 
@@ -326,35 +232,62 @@ function App() {
   }
 
   const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`
+  const canShowExamRating = mode !== 'exam' || (activeItem && (answers[activeItem.id] ?? '').trim().length >= 30)
 
   return (
     <main className="app-shell">
       <section className="hero-card">
-        <div className="eyebrow">StudyLock MVP · lokal benutzbar</div>
-        <h1>Material rein. Lernmodus an. Keine Planungsflucht.</h1>
-        <p>Importiere PDF/TXT oder füge dein Skript ein. StudyLock erzeugt Karteikarten, Klausurfragen, Timer-Sessions, Review-Fälligkeiten und Anki/Markdown-Export — alles lokal im Browser.</p>
+        <div className="eyebrow">Nicht chatten. Bestehen.</div>
+        <h1>Dein Skript wird ein täglicher Klausurplan.</h1>
+        <p>ChatGPT macht Fragen. StudyLock sagt dir, was du heute schaffen musst: Deadline, Tagesplan, Prüfungsmodus, Readiness Score, Schwächen und Panic Mode.</p>
         <div className="hero-actions">
           <button onClick={() => setStep('material')}>Dokument importieren</button>
-          <button className="secondary" onClick={() => startSession('recall')}>Nächste beste Session</button>
+          <button className="secondary" onClick={hydrateExamForm}>Klausurplan einrichten</button>
+          <button className="secondary" onClick={() => startSession(dailyPlan.mode)} disabled={!activeDocument}>{dailyPlan.command}</button>
         </div>
       </section>
 
       <section className="grid">
         <aside className="panel sticky-panel">
-          <h2>Arbeitszentrale</h2>
+          <h2>Command Center</h2>
           <div className="metric-row">
-            <div><strong>{documents.length}</strong><span>Dokumente</span></div>
-            <div><strong>{dueCount}</strong><span>fällig</span></div>
-            <div><strong>{results.length}</strong><span>Sessions</span></div>
-            <div><strong>{results[0]?.score ?? 0}%</strong><span>letzter Score</span></div>
+            <div><strong>{dailyPlan.daysLeft ?? '—'}</strong><span>Tage bis Klausur</span></div>
+            <div><strong>{readiness}%</strong><span>{readinessLabel(readiness)}</span></div>
+            <div><strong>{dueCount}</strong><span>fällige Fragen</span></div>
+            <div><strong>{documents.length}</strong><span>Skripte</span></div>
           </div>
-          <div className="decision-box compact"><strong>Nächste Aktion:</strong> {nextAction}</div>
+
+          <div className={`decision-box compact ${dailyPlan.priority}`}>
+            <strong>Heute:</strong> {dailyPlan.message}
+            <small>{dailyPlan.minutes} Min · {dailyPlan.targetItems} Items · {modeLabels[dailyPlan.mode]}</small>
+          </div>
+
+          {activeExamProfile && (
+            <div className="profile-card">
+              <span>Klausurprofil</span>
+              <strong>{activeExamProfile.subject}</strong>
+              <small>{new Date(activeExamProfile.examDate).toLocaleDateString('de-DE')} · {goalLabels[activeExamProfile.goal]} · Gefühl {activeExamProfile.confidence}/5</small>
+            </div>
+          )}
+
+          <div className="weakness-box">
+            <h3>Top Schwächen</h3>
+            {weakestTopics.length === 0 && <p className="muted">Noch keine Themen. Importiere Material und starte eine Session.</p>}
+            {weakestTopics.map((topic) => (
+              <div className="weakness" key={topic.topic}>
+                <span>{topic.topic}</span>
+                <strong>{topic.readiness}%</strong>
+                <small>{topic.again > 0 ? 'Nochmal heute' : topic.hard > 0 ? 'Schwer: gezielt wiederholen' : 'Noch offen'}</small>
+              </div>
+            ))}
+          </div>
+
           <div className="doc-list">
             {documents.length === 0 && <p className="muted">Noch kein Dokument. Importiere dein erstes Skript.</p>}
             {documents.map((doc) => (
-              <button key={doc.id} className={doc.id === activeDocumentId ? 'doc-card active' : 'doc-card'} onClick={() => setActiveDocumentId(doc.id)}>
+              <button key={doc.id} className={doc.id === activeDocumentId ? 'doc-card active' : 'doc-card'} onClick={() => { setActiveDocumentId(doc.id); if (doc.examProfileId) setActiveExamProfileId(doc.examProfileId) }}>
                 <strong>{doc.title}</strong>
-                <span>{doc.subject} · {doc.items.length} Fragen</span>
+                <span>{doc.subject} · {doc.items.length} Items · {calculateReadiness(doc.items)}% bereit</span>
               </button>
             ))}
           </div>
@@ -363,22 +296,34 @@ function App() {
         <section className="panel work-panel">
           {step === 'checkin' && (
             <div className="flow">
-              <span className="step-label">1 / Start</span>
-              <h2>Was wird jetzt gelernt?</h2>
+              <span className="step-label">1 / Tagesbefehl</span>
+              <h2>{dailyPlan.command}</h2>
+              <div className={`plan-card ${dailyPlan.priority}`}>
+                <div>
+                  <span>Heute</span>
+                  <strong>{dailyPlan.minutes} Minuten</strong>
+                  <small>{dailyPlan.targetItems} Fragen · {modeLabels[dailyPlan.mode]}</small>
+                </div>
+                <p>{dailyPlan.message}</p>
+              </div>
+              {dailyPlan.priority === 'panic' && <div className="panic-card"><strong>Panic Mode:</strong> Keine Zusammenfassungen, keine Farbcodes, keine neuen Notizen. Nur schwerste Fragen beantworten.</div>}
               <div className="active-doc">
                 <strong>{activeDocument?.title ?? 'Kein Dokument aktiv'}</strong>
                 <span>{activeDocument ? `${activeDocument.subject} · ${activeDocument.items.length} Lernitems · ${dueCount} fällig` : 'Importiere erst Material.'}</span>
               </div>
-              <div className="form-grid">
-                <label>Zeitcommitment<select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}><option value={10}>10 Minuten Einstieg</option><option value={25}>25 Minuten Fokus</option><option value={50}>50 Minuten Deep Work</option><option value={90}>90 Minuten Klausurblock</option></select></label>
-                <label>Session-Modus<select value={mode} onChange={(event) => setMode(event.target.value as Mode)}><option value="recall">Active Recall</option><option value="review">Review fälliger Karten</option><option value="exam">Exam Mode</option><option value="deepwork">Deep Work</option></select></label>
-              </div>
               <div className="mode-grid four">
                 {(Object.keys(modeLabels) as Mode[]).map((key) => (
-                  <button key={key} className={mode === key ? 'mode active' : 'mode'} onClick={() => setMode(key)}><strong>{modeLabels[key]}</strong><span>{key === 'recall' ? 'Abfragen statt lesen' : key === 'exam' ? 'Klausur-Simulation' : key === 'deepwork' ? 'Eine Aufgabe tief' : 'Fällige Schwächen'}</span></button>
+                  <button key={key} className={dailyPlan.mode === key ? 'mode active' : 'mode'} onClick={() => startSession(key)} disabled={!activeDocument}>
+                    <strong>{modeLabels[key]}</strong>
+                    <span>{key === 'recall' ? 'Abfragen statt lesen' : key === 'exam' ? 'Mini-Klausur' : key === 'deepwork' ? 'Eine schwere Aufgabe' : 'Fällige Schwächen'}</span>
+                  </button>
                 ))}
               </div>
-              <div className="hero-actions"><button onClick={() => startSession(mode)} disabled={!activeDocument}>Session starten</button><button className="secondary" onClick={() => setStep('material')}>Neues Dokument</button></div>
+              <div className="hero-actions">
+                <button onClick={() => dailyPlan.priority === 'panic' ? startPanicSession() : startSession(dailyPlan.mode)} disabled={!activeDocument}>{dailyPlan.command}</button>
+                <button className="secondary" onClick={hydrateExamForm}>Klausurplan bearbeiten</button>
+                <button className="secondary" onClick={() => setStep('material')}>Neues Dokument</button>
+              </div>
             </div>
           )}
 
@@ -393,7 +338,23 @@ function App() {
               <label className="file-drop">PDF/TXT/MD hochladen<input type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" onChange={(event) => handleFile(event.target.files?.[0])} /></label>
               {fileStatus && <p className="nudge">{fileStatus}</p>}
               <textarea value={material} onChange={(event) => setMaterial(event.target.value)} placeholder="Skript, Folien-Text oder eigene Notizen hier einfügen..." />
-              <div className="hero-actions"><button onClick={() => upsertDocument()}>Dokument speichern & Lernitems bauen</button><button className="secondary" onClick={() => { setDocumentTitle('Rechnungswesen Demo'); setSubject('Rechnungswesen'); setMaterial(sampleText) }}>Demo laden</button></div>
+              <div className="hero-actions"><button onClick={() => upsertDocument()}>Dokument speichern & Klausurplan bauen</button><button className="secondary" onClick={() => { setDocumentTitle('Rechnungswesen Demo'); setSubject('Rechnungswesen'); setMaterial(sampleText) }}>Demo laden</button></div>
+            </div>
+          )}
+
+          {step === 'exam-setup' && (
+            <div className="flow">
+              <span className="step-label">3 / Klausurprofil</span>
+              <h2>Wofür muss StudyLock dich verantwortlich halten?</h2>
+              <div className="form-grid">
+                <label>Fach / Modul<input value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
+                <label>Klausurdatum<input type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label>
+                <label>Ziel<select value={examGoal} onChange={(event) => setExamGoal(event.target.value as ExamGoal)}><option value="bestehen">Nur bestehen</option><option value="gut">2,x schaffen</option><option value="sehr-gut">1,x angreifen</option></select></label>
+                <label>Minuten pro Tag<select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}><option value={10}>10 Minuten Notfall</option><option value={25}>25 Minuten realistisch</option><option value={50}>50 Minuten Fokus</option><option value={90}>90 Minuten Klausurblock</option></select></label>
+              </div>
+              <label>Gefühl aktuell: {confidence}/5<input type="range" min="1" max="5" value={confidence} onChange={(event) => setConfidence(Number(event.target.value) as Confidence)} /></label>
+              <div className="decision-box"><strong>Warum das zählt:</strong> Ohne Deadline ist StudyLock nur ein PDF-Tool. Mit Deadline wird daraus ein täglicher Prüfungsbefehl.</div>
+              <div className="hero-actions"><button onClick={saveExamProfile}>Klausurprofil speichern</button><button className="secondary" onClick={() => setStep('checkin')}>Später</button></div>
             </div>
           )}
 
@@ -401,23 +362,31 @@ function App() {
             <div className="flow session-screen">
               <div className="session-top"><span className="step-label">{modeLabels[mode]} · {activeDocument.title}</span><span className="timer">{formatTime(remainingSeconds)}</span></div>
               <div className="progressbar"><span style={{ width: `${progress}%` }} /></div>
-              <div className="question-meta"><span>{activeItem.type}</span><span>{activeItem.difficulty}</span><span>{activeItem.source}</span><span>{progress}%</span></div>
+              <div className="question-meta"><span>{activeItem.type}</span><span>{activeItem.difficulty}</span><span>{activeItem.topic}</span><span>{progress}%</span></div>
               <h2>{activeItem.question}</h2>
               <textarea className="answer-box" value={answers[activeItem.id] ?? ''} onChange={(event) => setAnswers((prev) => ({ ...prev, [activeItem.id]: event.target.value }))} placeholder="Antworte aus dem Kopf. Erst danach Musterlösung öffnen." />
               <details className="solution"><summary>Musterlösung / Quelle ansehen</summary><p>{activeItem.answer}</p></details>
-              <div className="rating-row"><button className={ratings[activeItem.id] === 'again' ? 'rating active bad' : 'rating bad'} onClick={() => rateItem(activeItem.id, 'again')}>Nochmal heute</button><button className={ratings[activeItem.id] === 'hard' ? 'rating active' : 'rating'} onClick={() => rateItem(activeItem.id, 'hard')}>Schwer</button><button className={ratings[activeItem.id] === 'good' ? 'rating active good' : 'rating good'} onClick={() => rateItem(activeItem.id, 'good')}>Sitzt</button></div>
-              <div className="blocker-box"><strong>Blockiert?</strong><div className="chips">{['Zu schwer', 'Keine Motivation', 'Verstehe es nicht', 'Ablenkung'].map((reason) => <button key={reason} className="chip" onClick={() => setBlockedReason(reason)}>{reason}</button>)}</div>{blockedReason && <p className="nudge">{blockedReason}: kleiner machen. Schreibe nur den ersten Satz. Nicht abbrechen.</p>}</div>
+              {!canShowExamRating && <p className="nudge">Prüfungsmodus: erst mindestens 30 Zeichen selbst antworten, dann bewerten.</p>}
+              {canShowExamRating && (
+                <div className="rating-row">
+                  <button className={ratings[activeItem.id] === 'again' ? 'rating active bad' : 'rating bad'} onClick={() => rateItem(activeItem.id, 'again')}>{mode === 'exam' ? '0 Punkte' : 'Nochmal heute'}</button>
+                  <button className={ratings[activeItem.id] === 'hard' ? 'rating active' : 'rating'} onClick={() => rateItem(activeItem.id, 'hard')}>{mode === 'exam' ? 'Teilweise' : 'Schwer'}</button>
+                  <button className={ratings[activeItem.id] === 'good' ? 'rating active good' : 'rating good'} onClick={() => rateItem(activeItem.id, 'good')}>{mode === 'exam' ? 'Vollständig' : 'Sitzt'}</button>
+                </div>
+              )}
+              <div className="blocker-box"><strong>Blockiert?</strong><div className="chips">{Object.keys(blockerActions).map((reason) => <button key={reason} className="chip" onClick={() => registerBlocker(reason)}>{reason}</button>)}</div>{blockedReason && <p className="nudge">{blockerActions[blockedReason]}</p>}<button className="secondary mini" onClick={insertMiniAnswer}>Miniantwort übernehmen</button></div>
               <div className="session-actions"><button className="secondary" disabled={currentIndex === 0} onClick={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}>Zurück</button>{currentIndex < items.length - 1 ? <button onClick={() => setCurrentIndex((prev) => prev + 1)}>Nächste Frage</button> : <button onClick={finishSession}>Session abschließen</button>}</div>
             </div>
           )}
 
           {step === 'done' && activeDocument && (
             <div className="flow done-screen">
-              <span className="step-label">4 / Review</span>
-              <h2>Session fertig: {score}%</h2>
-              <p>{answeredCount} Antworten, {ratedCount} Bewertungen. Nächste Empfehlung: Review der fälligen oder schweren Karten.</p>
+              <span className="step-label">4 / Auswertung</span>
+              <h2>Session fertig: {sessionScore}% · Readiness {readiness}%</h2>
+              <p>{answeredCount} Antworten, {ratedCount} Bewertungen, {blockerCount} Blocker überwunden. {readinessLabel(readiness)}.</p>
+              {weakestTopics[0] && <div className="decision-box"><strong>Nächster Hebel:</strong> {weakestTopics[0].topic} gezielt wiederholen.</div>}
               <div className="hero-actions"><button onClick={() => startSession('review')}>Direkt Review starten</button><button className="secondary" onClick={() => exportAnki()}>Anki CSV exportieren</button><button className="secondary" onClick={() => exportMarkdown()}>Markdown exportieren</button></div>
-              <div className="recap-grid">{results.map((result) => <div className="recap" key={result.id}><strong>{result.documentTitle}</strong><span>{modeLabels[result.mode]} · {result.minutes} Min · {result.score}%</span><small>{result.date}</small></div>)}</div>
+              <div className="recap-grid">{results.map((result) => <div className="recap" key={result.id}><strong>{result.documentTitle}</strong><span>{modeLabels[result.mode]} · {result.minutes} Min · {result.score}%</span><small>{result.date} · Readiness {result.readinessAfter}% · Blocker {result.blockers}</small></div>)}</div>
             </div>
           )}
 

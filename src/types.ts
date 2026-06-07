@@ -5,6 +5,8 @@ export type Rating = 'again' | 'hard' | 'good'
 export type ExamGoal = 'bestehen' | 'gut' | 'sehr-gut'
 export type Confidence = 1 | 2 | 3 | 4 | 5
 export type PlanPriority = 'setup' | 'normal' | 'review' | 'panic'
+export type SourceType = 'pdf' | 'txt' | 'md' | 'paste'
+export type StorageMode = 'local' | 'supabase'
 
 export type StudyItem = {
   id: string
@@ -25,6 +27,7 @@ export type StudyDocument = {
   id: string
   title: string
   subject: string
+  sourceType?: SourceType
   text: string
   examProfileId?: string
   createdAt: string
@@ -80,4 +83,33 @@ export type AppStateSnapshot = {
   documents: StudyDocument[]
   examProfiles: ExamProfile[]
   results: SessionResult[]
+}
+
+export type DocumentChunk = {
+  id: string
+  documentId: string
+  chunkIndex: number
+  text: string
+  pageNumber?: number
+  heading?: string
+  tokenEstimate: number
+}
+
+export type StudyAttempt = {
+  id: string
+  sessionId: string
+  studyItemId: string
+  userAnswer: string
+  rating?: Rating
+  selfScore?: number
+  timeSpentSeconds?: number
+  createdAt: string
+}
+
+export type RepositoryStatus = {
+  mode: StorageMode
+  configured: boolean
+  authenticated: boolean
+  label: string
+  detail: string
 }

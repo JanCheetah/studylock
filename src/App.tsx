@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-import type { Confidence, ExamGoal, ExamProfile, Mode, Rating, SessionResult, Step, StudyDocument, StudyItem } from './types'
+import type { Confidence, ExamGoal, ExamProfile, Mode, Rating, RepositoryStatus, SessionResult, SourceType, Step, StudyDocument, StudyItem } from './types'
 import { extractFileText } from './lib/pdf'
 import { safeParse, saveJson, storageKeys } from './lib/storage'
 import {
@@ -17,6 +17,7 @@ import {
   sampleText,
   selectSessionItems,
 } from './lib/studyEngine'
+import { getRepositoryStatus, getStudyRepository } from './lib/repositories'
 
 const goalLabels: Record<ExamGoal, string> = {
   bestehen: 'Nur bestehen',
@@ -39,6 +40,20 @@ const todayPlus = (days: number) => {
 
 const currentTimestamp = () => Date.now()
 
+const defaultRepositoryStatus: RepositoryStatus = {
+  mode: 'local',
+  configured: true,
+  authenticated: true,
+  label: 'Lokaler Modus',
+  detail: 'Daten liegen im Browser-localStorage. Supabase ist vorbereitet, aber noch nicht aktiv.',
+}
+
+function persistRepositoryWrite(action: (repository: Awaited<ReturnType<typeof getStudyRepository>>) => Promise<void>) {
+  void getStudyRepository()
+    .then(action)
+    .catch((error: unknown) => console.warn('StudyLock persistence warning:', error))
+}
+
 function App() {
   const [step, setStep] = useState<Step>('checkin')
   const [subject, setSubject] = useState('Rechnungswesen')
@@ -46,6 +61,7 @@ function App() {
   const [mode, setMode] = useState<Mode>('recall')
   const [documentTitle, setDocumentTitle] = useState('Mein Skript')
   const [material, setMaterial] = useState(sampleText)
+  const [sourceType, setSourceType] = useState<SourceType>('paste')
   const [documents, setDocuments] = useState<StudyDocument[]>(() => safeParse(storageKeys.documents, []))
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(() => safeParse<string | null>(storageKeys.activeDocument, null))
   const [examProfiles, setExamProfiles] = useState<ExamProfile[]>(() => safeParse(storageKeys.examProfiles, []))
@@ -63,6 +79,7 @@ function App() {
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => currentTimestamp())
   const [results, setResults] = useState<SessionResult[]>(() => safeParse(storageKeys.results, []))
+  const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus>(defaultRepositoryStatus)
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? null
   const activeExamProfile = examProfiles.find((profile) => profile.id === (activeDocument?.examProfileId ?? activeExamProfileId)) ?? null
@@ -86,6 +103,19 @@ function App() {
   useEffect(() => saveJson(storageKeys.activeExamProfile, activeExamProfileId), [activeExamProfileId])
 
   useEffect(() => {
+    void getRepositoryStatus().then((status) => {
+      setRepositoryStatus(status)
+      if (status.mode === 'supabase' && status.authenticated) {
+        void getStudyRepository().then((repository) => repository.loadSnapshot()).then((snapshot) => {
+          setDocuments(snapshot.documents)
+          setExamProfiles(snapshot.examProfiles)
+          setResults(snapshot.results)
+        })
+      }
+    }).catch(() => setRepositoryStatus(defaultRepositoryStatus))
+  }, [])
+
+  useEffect(() => {
     const interval = window.setInterval(() => setNow(currentTimestamp()), 1000)
     return () => window.clearInterval(interval)
   }, [])
@@ -98,6 +128,7 @@ function App() {
       id: docId,
       title: documentTitle || 'Unbenanntes Skript',
       subject,
+      sourceType,
       text: clean,
       examProfileId: activeExamProfileId ?? undefined,
       createdAt: new Date().toISOString(),
@@ -106,6 +137,7 @@ function App() {
     }
     setDocuments((prev) => [newDocument, ...prev])
     setActiveDocumentId(docId)
+    persistRepositoryWrite((repository) => repository.saveDocument(newDocument))
     setStep('exam-setup')
   }
 
@@ -114,6 +146,8 @@ function App() {
     setFileStatus(`Lese ${file.name} ...`)
     try {
       const text = await extractFileText(file)
+      const extension = file.name.toLowerCase().split('.').pop()
+      setSourceType(extension === 'pdf' ? 'pdf' : extension === 'md' ? 'md' : 'txt')
       setMaterial(text)
       setDocumentTitle(file.name.replace(/\.[^.]+$/, ''))
       setFileStatus(`Importiert: ${file.name} (${Math.round(text.length / 100) / 10}k Zeichen)`)
@@ -137,6 +171,10 @@ function App() {
     setExamProfiles((prev) => [profile, ...prev.filter((item) => item.id !== profileId)])
     setActiveExamProfileId(profileId)
     setDocuments((prev) => prev.map((doc) => doc.id === activeDocumentId ? { ...doc, subject, examProfileId: profileId, updatedAt: new Date().toISOString() } : doc))
+    persistRepositoryWrite(async (repository) => {
+      await repository.saveExamProfile(profile)
+      if (activeDocument) await repository.saveDocument({ ...activeDocument, subject, examProfileId: profileId, updatedAt: new Date().toISOString() })
+    })
     setStep('checkin')
   }
 
@@ -176,10 +214,12 @@ function App() {
 
   function rateItem(itemId: string, rating: Rating) {
     setRatings((prev) => ({ ...prev, [itemId]: rating }))
+    const updatedItems = activeDocument?.items.map((item) => item.id === itemId ? { ...item, ...nextDueDate(item, rating) } : item)
     setDocuments((prev) => prev.map((doc) => ({
       ...doc,
       items: doc.items.map((item) => item.id === itemId ? { ...item, ...nextDueDate(item, rating) } : item),
     })))
+    if (activeDocument && updatedItems) persistRepositoryWrite((repository) => repository.saveStudyItems(activeDocument.id, updatedItems))
   }
 
   function registerBlocker(reason: string) {
@@ -211,6 +251,7 @@ function App() {
     }
     setStartedAt(null)
     setResults((prev) => [result, ...prev].slice(0, 10))
+    persistRepositoryWrite((repository) => repository.saveSession(result))
     setStep('done')
   }
 
@@ -228,6 +269,7 @@ function App() {
 
   function deleteDocument(documentId: string) {
     setDocuments((prev) => prev.filter((doc) => doc.id !== documentId))
+    persistRepositoryWrite((repository) => repository.deleteDocument(documentId))
     if (activeDocumentId === documentId) setActiveDocumentId(null)
   }
 
@@ -260,6 +302,12 @@ function App() {
           <div className={`decision-box compact ${dailyPlan.priority}`}>
             <strong>Heute:</strong> {dailyPlan.message}
             <small>{dailyPlan.minutes} Min · {dailyPlan.targetItems} Items · {modeLabels[dailyPlan.mode]}</small>
+          </div>
+
+          <div className={`storage-card ${repositoryStatus.mode}`}>
+            <span>Datenbasis</span>
+            <strong>{repositoryStatus.label}</strong>
+            <small>{repositoryStatus.detail}</small>
           </div>
 
           {activeExamProfile && (
@@ -338,7 +386,7 @@ function App() {
               <label className="file-drop">PDF/TXT/MD hochladen<input type="file" accept=".pdf,.txt,.md,text/plain,application/pdf" onChange={(event) => handleFile(event.target.files?.[0])} /></label>
               {fileStatus && <p className="nudge">{fileStatus}</p>}
               <textarea value={material} onChange={(event) => setMaterial(event.target.value)} placeholder="Skript, Folien-Text oder eigene Notizen hier einfügen..." />
-              <div className="hero-actions"><button onClick={() => upsertDocument()}>Dokument speichern & Klausurplan bauen</button><button className="secondary" onClick={() => { setDocumentTitle('Rechnungswesen Demo'); setSubject('Rechnungswesen'); setMaterial(sampleText) }}>Demo laden</button></div>
+              <div className="hero-actions"><button onClick={() => upsertDocument()}>Dokument speichern & Klausurplan bauen</button><button className="secondary" onClick={() => { setDocumentTitle('Rechnungswesen Demo'); setSubject('Rechnungswesen'); setSourceType('paste'); setMaterial(sampleText) }}>Demo laden</button></div>
             </div>
           )}
 

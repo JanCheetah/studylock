@@ -178,6 +178,7 @@ h3 {
 .recap,
 .active-doc,
 .profile-card,
+.storage-card,
 .weakness,
 .plan-card {
   min-height: 84px;
@@ -199,6 +200,8 @@ h3 {
 .active-doc span,
 .profile-card span,
 .profile-card small,
+.storage-card span,
+.storage-card small,
 .weakness small,
 .plan-card small,
 .decision-box small {
@@ -240,6 +243,19 @@ h3 {
   display: grid;
   gap: 0.25rem;
   margin-top: 1rem;
+}
+
+.storage-card {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  border-color: rgba(124, 92, 255, 0.35);
+  background: rgba(124, 92, 255, 0.1);
+}
+
+.storage-card.supabase {
+  border-color: rgba(0, 209, 178, 0.45);
+  background: rgba(0, 209, 178, 0.1);
 }
 
 .weakness {

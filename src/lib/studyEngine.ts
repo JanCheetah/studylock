@@ -83,6 +83,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         dueAt: now,
         intervalDays: 0,
         repetitions: 0,
+        easeFactor: 2.5,
       },
       {
         id: `${base}-exam`,
@@ -96,6 +97,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         dueAt: now,
         intervalDays: 0,
         repetitions: 0,
+        easeFactor: 2.5,
       },
       {
         id: `${base}-task`,
@@ -109,6 +111,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         dueAt: now,
         intervalDays: 0,
         repetitions: 0,
+        easeFactor: 2.5,
       },
     ]
   }).slice(0, 36)
@@ -116,10 +119,32 @@ export function buildItems(documentId: string, subject: string, text: string): S
 
 export function nextDueDate(item: StudyItem, rating: Rating) {
   const next = new Date()
-  const interval = rating === 'again' ? 0 : rating === 'hard' ? Math.max(1, item.intervalDays || 1) : Math.max(1, (item.intervalDays || 1) * 2)
-  if (rating === 'again') next.setHours(next.getHours() + 4)
-  else next.setDate(next.getDate() + interval)
-  return { dueAt: next.toISOString(), intervalDays: interval, repetitions: item.repetitions + (rating === 'again' ? 0 : 1), lastRating: rating }
+  const ef = item.easeFactor ?? 2.5
+
+  // SM-2 ease factor adjustment
+  let newEF = ef
+  if (rating === 'again') newEF = Math.max(1.3, ef - 0.3)
+  else if (rating === 'hard') newEF = Math.max(1.3, ef - 0.15)
+  else newEF = Math.max(1.3, ef + 0.1)
+
+  let interval: number
+  const reps = item.repetitions + (rating === 'again' ? 0 : 1)
+
+  if (rating === 'again') {
+    interval = 0
+    next.setHours(next.getHours() + 4)
+  } else if (reps <= 1) {
+    interval = 1
+    next.setDate(next.getDate() + 1)
+  } else if (reps === 2) {
+    interval = 3
+    next.setDate(next.getDate() + 3)
+  } else {
+    interval = Math.round((item.intervalDays || 1) * newEF)
+    next.setDate(next.getDate() + interval)
+  }
+
+  return { dueAt: next.toISOString(), intervalDays: interval, repetitions: reps, lastRating: rating, easeFactor: newEF }
 }
 
 export function daysUntil(date: string) {
@@ -222,16 +247,23 @@ export function buildTopicStats(items: StudyItem[]): TopicStat[] {
 export function selectSessionItems(doc: StudyDocument, mode: Mode, target = 8) {
   const now = Date.now()
   const dueItems = doc.items.filter((item) => new Date(item.dueAt).getTime() <= now)
-  const weaknessFirst = [...doc.items].sort((a, b) => {
+
+  // Sort by urgency: overdue items first, then by weakness
+  const byUrgency = [...doc.items].sort((a, b) => {
     const ratingRank = (rating?: Rating) => rating === 'again' ? 0 : rating === 'hard' ? 1 : rating === 'good' ? 3 : 2
     const difficultyRank = (difficulty: Difficulty) => difficulty === 'hart' ? 0 : difficulty === 'mittel' ? 1 : 2
-    return ratingRank(a.lastRating) - ratingRank(b.lastRating) || difficultyRank(a.difficulty) - difficultyRank(b.difficulty)
+    const overdueA = Math.max(0, now - new Date(a.dueAt).getTime()) / 86_400_000
+    const overdueB = Math.max(0, now - new Date(b.dueAt).getTime()) / 86_400_000
+    // Overdue items get priority boost
+    const urgencyA = ratingRank(a.lastRating) - Math.min(overdueA * 0.5, 2)
+    const urgencyB = ratingRank(b.lastRating) - Math.min(overdueB * 0.5, 2)
+    return urgencyA - urgencyB || difficultyRank(a.difficulty) - difficultyRank(b.difficulty)
   })
 
-  if (mode === 'review') return (dueItems.length ? dueItems : weaknessFirst).slice(0, target)
-  if (mode === 'exam') return weaknessFirst.filter((item) => item.type !== 'karte').slice(0, target)
-  if (mode === 'deepwork') return weaknessFirst.filter((item) => item.difficulty !== 'leicht').slice(0, Math.min(target, 5))
-  return weaknessFirst.slice(0, target)
+  if (mode === 'review') return (dueItems.length ? dueItems : byUrgency).slice(0, target)
+  if (mode === 'exam') return byUrgency.filter((item) => item.type !== 'karte').slice(0, target)
+  if (mode === 'deepwork') return byUrgency.filter((item) => item.difficulty !== 'leicht').slice(0, Math.min(target, 5))
+  return byUrgency.slice(0, target)
 }
 
 export function download(filename: string, content: string, type = 'text/plain') {

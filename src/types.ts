@@ -21,6 +21,10 @@ export type StudyItem = {
   intervalDays: number
   repetitions: number
   lastRating?: Rating
+  easeFactor: number
+  aiGenerated?: boolean
+  hint?: string
+  aiEvaluation?: string
 }
 
 export type StudyDocument = {

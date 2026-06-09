@@ -232,6 +232,7 @@ export class SupabaseStudyRepository implements StudyRepository {
       intervalDays: row.interval_days,
       repetitions: row.repetitions,
       lastRating: row.last_rating ?? undefined,
+      easeFactor: 2.5,
     }
   }
 

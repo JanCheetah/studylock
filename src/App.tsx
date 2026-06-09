@@ -19,6 +19,7 @@ import {
   selectSessionItems,
 } from './lib/studyEngine'
 import { getRepositoryStatus, getStudyRepository, syncLocalSnapshotToCloud } from './lib/repositories'
+import { generateStudyItemsWithAi } from './lib/ai'
 
 const goalLabels: Record<ExamGoal, string> = {
   bestehen: 'Nur bestehen',
@@ -146,10 +147,13 @@ function App() {
     return () => window.clearInterval(interval)
   }, [])
 
-  function upsertDocument(text = material) {
+  async function upsertDocument(text = material) {
     const clean = normalizeText(text)
     if (!clean) return
     const docId = id('doc')
+    setFileStatus('Erzeuge Lernitems ...')
+    const heuristicItems = buildItems(docId, subject, clean)
+    const aiItems = await generateStudyItemsWithAi(docId, subject, clean)
     const newDocument: StudyDocument = {
       id: docId,
       title: documentTitle || 'Unbenanntes Skript',
@@ -159,8 +163,9 @@ function App() {
       examProfileId: activeExamProfileId ?? undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      items: buildItems(docId, subject, clean),
+      items: aiItems ?? heuristicItems,
     }
+    setFileStatus(aiItems ? `KI hat ${aiItems.length} Lernitems erzeugt.` : `Heuristik hat ${heuristicItems.length} Lernitems erzeugt.`)
     setDocuments((prev) => [newDocument, ...prev])
     setActiveDocumentId(docId)
     persistRepositoryWrite((repository) => repository.saveDocument(newDocument))

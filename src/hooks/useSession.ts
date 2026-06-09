@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Mode, StudyItem, Rating, SessionResult, StudyDocument, Step } from '../types'
 import { safeParse, saveJson, storageKeys } from '../lib/storage'
-import { selectSessionItems, nextDueDate, calculateReadiness, buildStudyAttempts } from '../lib/studyEngine'
+import { selectSessionItems, nextDueDate, calculateReadiness, buildStudyAttempts, id } from '../lib/studyEngine'
 import { persistRepositoryWrite } from '../lib/persist'
 
 export function useSession(
@@ -29,8 +29,6 @@ export function useSession(
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(interval)
   }, [])
-
-  const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   const startSession = (selectedMode: Mode, targetItems: number, panicMinutes?: number) => {
     const doc = activeDocument

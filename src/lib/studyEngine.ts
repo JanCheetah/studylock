@@ -9,8 +9,13 @@ export const modeLabels: Record<Mode, string> = {
 
 export const sampleText = `Aktivkonten mehren sich im Soll und mindern sich im Haben. Passivkonten mehren sich im Haben und mindern sich im Soll. Die Gewinn- und Verlustrechnung sammelt Aufwendungen und Erträge und zeigt den Periodenerfolg. Buchungssätze folgen dem Prinzip Soll an Haben. Eine Bilanz zeigt Vermögen auf der Aktivseite und Kapital auf der Passivseite. Beim einfachen Simplex-Verfahren werden Entscheidungsvariablen, Zielfunktion und Nebenbedingungen in eine zulässige Ausgangslösung überführt. Opportunitätskosten beschreiben den entgangenen Nutzen der besten nicht gewählten Alternative.`
 
-export function id(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+export function id(_prefix?: string) {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+
+  return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (char) => {
+    const random = Math.floor(Math.random() * 16)
+    return (Number(char) ^ (random & (15 >> (Number(char) / 4)))).toString(16)
+  })
 }
 
 export function normalizeText(text: string) {
@@ -295,7 +300,7 @@ export function buildStudyAttempts({
     .map((item) => {
       const rating = ratings[item.id]
       return {
-        id: `${sessionId}-${item.id}`,
+        id: id('attempt'),
         sessionId,
         studyItemId: item.id,
         userAnswer: answers[item.id]?.trim() ?? '',

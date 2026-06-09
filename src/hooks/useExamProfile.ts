@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { ExamProfile, ExamGoal, Confidence, StudyDocument, Step } from '../types'
 import { safeParse, saveJson, storageKeys } from '../lib/storage'
 import { persistRepositoryWrite } from '../lib/persist'
+import { id } from '../lib/studyEngine'
 
 const todayPlus = (days: number) => {
   const date = new Date()
@@ -25,8 +26,6 @@ export function useExamProfile(
   const [minutes, setMinutes] = useState(25)
 
   useEffect(() => saveJson(storageKeys.examProfiles, examProfiles), [examProfiles])
-
-  const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   const activeExamProfile = examProfiles.find((profile) => profile.id === (activeDocument?.examProfileId ?? activeExamProfileId)) ?? null
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { StudyDocument, SourceType, Step } from '../types'
 import { safeParse, saveJson, storageKeys } from '../lib/storage'
-import { normalizeText, buildItems, sampleText, download, calculateReadiness } from '../lib/studyEngine'
+import { normalizeText, buildItems, sampleText, download, calculateReadiness, id } from '../lib/studyEngine'
 import { extractFileText } from '../lib/pdf'
 import { persistRepositoryWrite } from '../lib/persist'
 import { generateItemsFromText, isAIAvailable } from '../lib/aiStudyEngine'
@@ -32,8 +32,6 @@ export function useDocuments(
   useEffect(() => saveJson(storageKeys.activeDocument, activeDocumentId), [activeDocumentId])
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? null
-
-  const id = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 
   const upsertDocument = async (text = material) => {
     const clean = normalizeText(text)

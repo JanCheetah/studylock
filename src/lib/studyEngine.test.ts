@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
+  id,
   splitIntoChunks,
   extractTerms,
   buildItems,
@@ -23,6 +24,12 @@ describe('studyEngine', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  describe('id', () => {
+    it('creates Supabase-compatible UUID strings', () => {
+      expect(id('doc')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    })
   })
 
   describe('splitIntoChunks', () => {
@@ -408,7 +415,7 @@ describe('studyEngine', () => {
 
       expect(attempts).toEqual([
         expect.objectContaining({
-          id: 'session-1-item-answered',
+          id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
           sessionId: 'session-1',
           studyItemId: 'item-answered',
           userAnswer: 'Meine Antwort mit genug Inhalt',
@@ -417,7 +424,7 @@ describe('studyEngine', () => {
           createdAt: '2026-06-09T12:00:00.000Z',
         }),
         expect.objectContaining({
-          id: 'session-1-item-rated',
+          id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
           sessionId: 'session-1',
           studyItemId: 'item-rated',
           userAnswer: '',

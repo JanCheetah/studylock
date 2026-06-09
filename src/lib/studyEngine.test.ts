@@ -10,6 +10,7 @@ import {
   readinessLabel,
   buildTopicStats,
   selectSessionItems,
+  buildStudyAttempts,
 } from './studyEngine'
 import type { ExamProfile, StudyItem, StudyDocument } from '../types'
 
@@ -363,6 +364,68 @@ describe('studyEngine', () => {
       const selected = selectSessionItems(mockDoc, 'recall', 1)
       expect(selected.length).toBe(1)
       expect(selected[0].id).toBe('2')
+    })
+  })
+
+  describe('buildStudyAttempts', () => {
+    it('creates one attempt for every answered or rated session item', () => {
+      const attempts = buildStudyAttempts({
+        sessionId: 'session-1',
+        items: [
+          {
+            id: 'item-answered',
+            documentId: 'doc-1',
+            topic: 'Topic',
+            question: 'Q1',
+            answer: 'A1',
+            source: 'S1',
+            difficulty: 'leicht',
+            type: 'karte',
+            dueAt: '2026-06-09T12:00:00.000Z',
+            intervalDays: 0,
+            repetitions: 0,
+            easeFactor: 2.5,
+          },
+          {
+            id: 'item-rated',
+            documentId: 'doc-1',
+            topic: 'Topic',
+            question: 'Q2',
+            answer: 'A2',
+            source: 'S2',
+            difficulty: 'mittel',
+            type: 'quiz',
+            dueAt: '2026-06-09T12:00:00.000Z',
+            intervalDays: 0,
+            repetitions: 0,
+            easeFactor: 2.5,
+          },
+        ],
+        answers: { 'item-answered': 'Meine Antwort mit genug Inhalt' },
+        ratings: { 'item-rated': 'hard' },
+        now: '2026-06-09T12:00:00.000Z',
+      })
+
+      expect(attempts).toEqual([
+        expect.objectContaining({
+          id: 'session-1-item-answered',
+          sessionId: 'session-1',
+          studyItemId: 'item-answered',
+          userAnswer: 'Meine Antwort mit genug Inhalt',
+          rating: undefined,
+          selfScore: undefined,
+          createdAt: '2026-06-09T12:00:00.000Z',
+        }),
+        expect.objectContaining({
+          id: 'session-1-item-rated',
+          sessionId: 'session-1',
+          studyItemId: 'item-rated',
+          userAnswer: '',
+          rating: 'hard',
+          selfScore: 50,
+          createdAt: '2026-06-09T12:00:00.000Z',
+        }),
+      ])
     })
   })
 })

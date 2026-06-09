@@ -17,4 +17,5 @@ export const storageKeys = {
   examProfiles: 'studylock-exam-profiles',
   activeExamProfile: 'studylock-active-exam-profile',
   results: 'studylock-results',
+  attempts: 'studylock-attempts',
 } as const

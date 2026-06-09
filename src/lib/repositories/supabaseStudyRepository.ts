@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js'
-import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
 import { supabase } from '../supabaseClient'
 import type { StudyRepository } from './studyRepository'
 
@@ -176,6 +176,24 @@ export class SupabaseStudyRepository implements StudyRepository {
       blocker_count: result.blockers,
       readiness_after: result.readinessAfter,
     })
+    if (error) throw error
+  }
+
+  async saveStudyAttempts(attempts: StudyAttempt[]): Promise<void> {
+    if (!attempts.length) return
+    const user = await this.requireUser()
+    const rows = attempts.map((attempt) => ({
+      id: attempt.id,
+      user_id: user.id,
+      session_id: attempt.sessionId,
+      study_item_id: attempt.studyItemId,
+      user_answer: attempt.userAnswer,
+      rating: attempt.rating ?? null,
+      self_score: attempt.selfScore ?? null,
+      time_spent_seconds: attempt.timeSpentSeconds ?? null,
+      created_at: attempt.createdAt,
+    }))
+    const { error } = await this.client.from('study_attempts').insert(rows)
     if (error) throw error
   }
 

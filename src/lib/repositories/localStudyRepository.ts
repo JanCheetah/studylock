@@ -1,4 +1,4 @@
-import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
 import { safeParse, saveJson, storageKeys } from '../storage'
 import type { StudyRepository } from './studyRepository'
 
@@ -44,6 +44,13 @@ export class LocalStudyRepository implements StudyRepository {
   async saveSession(result: SessionResult): Promise<void> {
     const results = safeParse<SessionResult[]>(storageKeys.results, [])
     saveJson(storageKeys.results, [result, ...results.filter((item) => item.id !== result.id)].slice(0, 50))
+  }
+
+  async saveStudyAttempts(attempts: StudyAttempt[]): Promise<void> {
+    if (!attempts.length) return
+    const existing = safeParse<StudyAttempt[]>(storageKeys.attempts, [])
+    const attemptIds = new Set(attempts.map((attempt) => attempt.id))
+    saveJson(storageKeys.attempts, [...attempts, ...existing.filter((attempt) => !attemptIds.has(attempt.id))].slice(0, 500))
   }
 
   async recordAiGeneration(_log: AiGenerationLog): Promise<void> {

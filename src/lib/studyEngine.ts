@@ -1,4 +1,4 @@
-import type { DailyPlan, Difficulty, ExamProfile, Mode, Rating, StudyDocument, StudyItem, TopicStat } from '../types'
+import type { DailyPlan, Difficulty, ExamProfile, Mode, Rating, StudyAttempt, StudyDocument, StudyItem, TopicStat } from '../types'
 
 export const modeLabels: Record<Mode, string> = {
   recall: 'Active Recall',
@@ -267,6 +267,44 @@ export function selectSessionItems(doc: StudyDocument, mode: Mode, target = 8) {
   if (mode === 'exam') return byUrgency.filter((item) => item.type !== 'karte').slice(0, target)
   if (mode === 'deepwork') return byUrgency.filter((item) => item.difficulty !== 'leicht').slice(0, Math.min(target, 5))
   return byUrgency.slice(0, target)
+}
+
+const scoreByRating: Record<Rating, number> = {
+  again: 0,
+  hard: 50,
+  good: 100,
+}
+
+export function buildStudyAttempts({
+  sessionId,
+  items,
+  answers,
+  ratings,
+  elapsedSeconds,
+  now = new Date().toISOString(),
+}: {
+  sessionId: string
+  items: StudyItem[]
+  answers: Record<string, string>
+  ratings: Record<string, Rating>
+  elapsedSeconds?: number
+  now?: string
+}): StudyAttempt[] {
+  return items
+    .filter((item) => (answers[item.id] ?? '').trim().length > 0 || Boolean(ratings[item.id]))
+    .map((item) => {
+      const rating = ratings[item.id]
+      return {
+        id: `${sessionId}-${item.id}`,
+        sessionId,
+        studyItemId: item.id,
+        userAnswer: answers[item.id]?.trim() ?? '',
+        rating,
+        selfScore: rating ? scoreByRating[rating] : undefined,
+        timeSpentSeconds: elapsedSeconds,
+        createdAt: now,
+      }
+    })
 }
 
 export function download(filename: string, content: string, type = 'text/plain') {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { Mode, StudyItem, Rating, SessionResult, StudyDocument, Step } from '../types'
 import { safeParse, saveJson, storageKeys } from '../lib/storage'
-import { selectSessionItems, nextDueDate, calculateReadiness } from '../lib/studyEngine'
+import { selectSessionItems, nextDueDate, calculateReadiness, buildStudyAttempts } from '../lib/studyEngine'
 import { persistRepositoryWrite } from '../lib/persist'
 
 export function useSession(
@@ -88,9 +88,11 @@ export function useSession(
 
   const finishSession = () => {
     if (!activeDocument) return
+    const sessionId = id('session')
+    const finishedAt = new Date().toISOString()
     const result: SessionResult = {
-      id: id('session'),
-      date: new Date().toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }),
+      id: sessionId,
+      date: new Date(finishedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }),
       subject: activeDocument.subject,
       documentTitle: activeDocument.title,
       mode,
@@ -100,9 +102,20 @@ export function useSession(
       blockers: blockerCount,
       readinessAfter: calculateReadiness(activeDocument.items),
     }
+    const attempts = buildStudyAttempts({
+      sessionId,
+      items,
+      answers,
+      ratings,
+      elapsedSeconds,
+      now: finishedAt,
+    })
     setStartedAt(null)
     setResults((prev) => [result, ...prev].slice(0, 10))
-    persistRepositoryWrite((repository) => repository.saveSession(result))
+    persistRepositoryWrite(async (repository) => {
+      await repository.saveSession(result)
+      await repository.saveStudyAttempts(attempts)
+    })
     setStep('done')
   }
 

@@ -76,4 +76,43 @@ describe('SupabaseStudyRepository', () => {
       error_message: null,
     }))
   })
+
+  it('persists study attempts for completed session answers and ratings', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null })
+    const fakeClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
+      },
+      from: vi.fn(() => ({ insert })),
+    }
+    const repository = new SupabaseStudyRepository(fakeClient as never)
+
+    await repository.saveStudyAttempts([
+      {
+        id: 'attempt-1',
+        sessionId: 'session-1',
+        studyItemId: 'item-1',
+        userAnswer: 'Eigene Antwort',
+        rating: 'good',
+        selfScore: 100,
+        timeSpentSeconds: 45,
+        createdAt: '2026-06-09T12:00:00.000Z',
+      },
+    ])
+
+    expect(fakeClient.from).toHaveBeenCalledWith('study_attempts')
+    expect(insert).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'attempt-1',
+        user_id: 'user-1',
+        session_id: 'session-1',
+        study_item_id: 'item-1',
+        user_answer: 'Eigene Antwort',
+        rating: 'good',
+        self_score: 100,
+        time_spent_seconds: 45,
+        created_at: '2026-06-09T12:00:00.000Z',
+      }),
+    ])
+  })
 })

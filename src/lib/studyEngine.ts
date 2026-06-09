@@ -1,4 +1,4 @@
-import type { DailyPlan, Difficulty, ExamProfile, Mode, Rating, StudyAttempt, StudyDocument, StudyItem, TopicStat } from '../types'
+import type { DailyPlan, Difficulty, DocumentChunk, ExamProfile, Mode, Rating, StudyAttempt, StudyDocument, StudyItem, TopicStat } from '../types'
 
 export const modeLabels: Record<Mode, string> = {
   recall: 'Active Recall',
@@ -320,4 +320,15 @@ export function download(filename: string, content: string, type = 'text/plain')
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+export function buildDocumentChunks(documentId: string, text: string): DocumentChunk[] {
+  const chunks = splitIntoChunks(text)
+  return chunks.map((chunkText, index) => ({
+    id: `chunk-${documentId}-${index}`,
+    documentId,
+    chunkIndex: index,
+    text: chunkText,
+    tokenEstimate: Math.ceil(chunkText.length / 4),
+  }))
 }

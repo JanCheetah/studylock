@@ -1,4 +1,4 @@
-import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, DocumentChunk, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
 
 export type StudyRepository = {
   status(): Promise<RepositoryStatus>
@@ -9,6 +9,7 @@ export type StudyRepository = {
   saveStudyItems(documentId: string, items: StudyItem[]): Promise<void>
   saveSession(result: SessionResult): Promise<void>
   saveStudyAttempts(attempts: StudyAttempt[]): Promise<void>
+  saveDocumentChunks(documentId: string, chunks: DocumentChunk[]): Promise<void>
   recordAiGeneration(log: AiGenerationLog): Promise<void>
   saveSnapshot(snapshot: AppStateSnapshot): Promise<void>
 }

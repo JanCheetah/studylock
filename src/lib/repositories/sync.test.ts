@@ -54,6 +54,7 @@ function fakeRepo(overrides: Partial<StudyRepository>): StudyRepository {
     saveStudyItems: vi.fn(),
     saveSession: vi.fn(),
     saveStudyAttempts: vi.fn(),
+    saveDocumentChunks: vi.fn(),
     recordAiGeneration: vi.fn(),
     saveSnapshot: vi.fn(),
     ...overrides,

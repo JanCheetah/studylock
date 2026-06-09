@@ -34,10 +34,10 @@ export async function generateItemsFromText(
   text: string,
   count = 20,
   onProgress?: (status: string) => void
-): Promise<{ items: StudyItem[]; aiGenerated: boolean }> {
+): Promise<{ items: StudyItem[]; aiGenerated: boolean; model?: string; promptVersion?: string; errorMessage?: string }> {
   if (!hasApiKey()) {
     onProgress?.('Kein AI Key – verwende Template-Generierung...')
-    return { items: buildItems(documentId, subject, text), aiGenerated: false }
+    return { items: buildItems(documentId, subject, text), aiGenerated: false, errorMessage: 'Kein AI Key konfiguriert' }
   }
 
   onProgress?.('AI analysiert dein Material...')
@@ -108,11 +108,12 @@ Antworte als JSON Array mit diesem Format:
     }))
 
     onProgress?.(`✓ ${studyItems.length} AI-Fragen bereit!`)
-    return { items: studyItems, aiGenerated: true }
+    return { items: studyItems, aiGenerated: true, model: 'openrouter/owl-alpha', promptVersion: 'v1' }
   } catch (error) {
     console.warn('AI generation failed, falling back to templates:', error)
     onProgress?.('AI fehlgeschlagen – verwende Template-Fallback...')
-    return { items: buildItems(documentId, subject, text), aiGenerated: false }
+    const msg = error instanceof Error ? error.message : 'Unknown AI error'
+    return { items: buildItems(documentId, subject, text), aiGenerated: false, errorMessage: msg }
   }
 }
 

@@ -1,7 +1,8 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js'
-import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, DocumentChunk, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
 import { supabase } from '../supabaseClient'
 import type { StudyRepository } from './studyRepository'
+import { buildDocumentChunks } from '../studyEngine'
 
 type DbDocument = {
   id: string
@@ -81,11 +82,12 @@ export class SupabaseStudyRepository implements StudyRepository {
 
   async loadSnapshot(): Promise<AppStateSnapshot> {
     const user = await this.requireUser()
-    const [{ data: documents }, { data: profiles }, { data: items }, { data: sessions }] = await Promise.all([
+    const [{ data: documents }, { data: profiles }, { data: items }, { data: sessions }, { data: attempts }] = await Promise.all([
       this.client.from('documents').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       this.client.from('exam_profiles').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       this.client.from('study_items').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
       this.client.from('study_sessions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
+      this.client.from('study_attempts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1000),
     ])
 
     const itemsByDocument = new Map<string, StudyItem[]>()
@@ -94,10 +96,20 @@ export class SupabaseStudyRepository implements StudyRepository {
       itemsByDocument.set(mapped.documentId, [...(itemsByDocument.get(mapped.documentId) ?? []), mapped])
     }
 
+    const mappedAttempts: StudyAttempt[] = (attempts ?? []).map((attempt: any) => ({
+      id: attempt.id,
+      sessionId: attempt.session_id,
+      studyItemId: attempt.study_item_id,
+      userAnswer: attempt.user_answer ?? '',
+      rating: attempt.rating ?? undefined,
+      createdAt: attempt.created_at,
+    }))
+
     return {
       documents: ((documents ?? []) as DbDocument[]).map((doc) => this.mapDocument(doc, itemsByDocument.get(doc.id) ?? [])),
       examProfiles: ((profiles ?? []) as DbExamProfile[]).map(this.mapExamProfile),
       results: ((sessions ?? []) as DbSession[]).map((session) => this.mapSession(session, ((documents ?? []) as DbDocument[]).find((doc) => doc.id === session.document_id))),
+      attempts: mappedAttempts,
     }
   }
 
@@ -118,6 +130,8 @@ export class SupabaseStudyRepository implements StudyRepository {
     })
     if (error) throw error
     await this.saveStudyItems(document.id, document.items)
+    const chunks = buildDocumentChunks(document.id, document.text)
+    await this.saveDocumentChunks(document.id, chunks)
   }
 
   async deleteDocument(documentId: string): Promise<void> {
@@ -197,6 +211,19 @@ export class SupabaseStudyRepository implements StudyRepository {
     if (error) throw error
   }
 
+  async saveDocumentChunks(documentId: string, chunks: DocumentChunk[]): Promise<void> {
+    const user = await this.requireUser()
+    const rows = chunks.map((chunk) => ({
+      user_id: user.id,
+      document_id: documentId,
+      chunk_index: chunk.chunkIndex,
+      text: chunk.text,
+      token_estimate: chunk.tokenEstimate,
+    }))
+    const { error } = await this.client.from('document_chunks').upsert(rows, { onConflict: 'document_id,chunk_index' })
+    if (error) throw error
+  }
+
   async recordAiGeneration(log: AiGenerationLog): Promise<void> {
     try {
       const user = await this.requireUser()
@@ -224,6 +251,9 @@ export class SupabaseStudyRepository implements StudyRepository {
     for (const profile of snapshot.examProfiles) await this.saveExamProfile(profile)
     for (const document of snapshot.documents) await this.saveDocument(document)
     for (const result of snapshot.results) await this.saveSession(result)
+    if (snapshot.attempts) {
+      await this.saveStudyAttempts(snapshot.attempts)
+    }
   }
 
   private async requireUser(): Promise<User> {

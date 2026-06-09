@@ -89,6 +89,7 @@ export type AppStateSnapshot = {
   documents: StudyDocument[]
   examProfiles: ExamProfile[]
   results: SessionResult[]
+  attempts?: StudyAttempt[]
 }
 
 export type DocumentChunk = {

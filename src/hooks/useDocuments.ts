@@ -4,7 +4,8 @@ import { safeParse, saveJson, storageKeys } from '../lib/storage'
 import { normalizeText, buildItems, sampleText, download, calculateReadiness, id } from '../lib/studyEngine'
 import { extractFileText } from '../lib/pdf'
 import { persistRepositoryWrite } from '../lib/persist'
-import { generateItemsFromText, isAIAvailable } from '../lib/aiStudyEngine'
+import { generateStudyItemsWithAi } from '../lib/ai'
+import { isAIAvailable } from '../lib/aiStudyEngine'
 
 const generationInputHash = async (text: string) => {
   if (globalThis.crypto?.subtle) {
@@ -42,13 +43,8 @@ export function useDocuments(
     setGenerationStatus('Starte Fragen-Generierung...')
 
     try {
-      const { items, aiGenerated } = await generateItemsFromText(
-        docId,
-        subject,
-        clean,
-        20,
-        setGenerationStatus
-      )
+      const hash = await generationInputHash(clean)
+      const result = await generateStudyItemsWithAi(docId, subject, clean, setGenerationStatus)
 
       const newDocument: StudyDocument = {
         id: docId,
@@ -59,33 +55,39 @@ export function useDocuments(
         examProfileId: activeExamProfileId ?? undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        items,
+        items: result.items,
       }
       setDocuments((prev) => [newDocument, ...prev])
       setActiveDocumentId(docId)
       persistRepositoryWrite(async (repository) => {
         await repository.saveDocument(newDocument)
+        
+        const isSuccess = result.source === 'openrouter'
         await repository.recordAiGeneration({
           documentId: docId,
-          status: aiGenerated ? 'succeeded' : 'failed',
-          provider: aiGenerated ? 'openrouter' : 'local',
-          model: aiGenerated ? 'openrouter/optimus-alpha' : 'heuristic-v1',
-          promptVersion: 'study-items-v1',
-          inputHash: await generationInputHash(clean),
-          itemsCount: items.length,
-          errorMessage: aiGenerated ? undefined : 'AI unavailable or failed; heuristic fallback used',
+          status: isSuccess ? 'succeeded' : 'failed',
+          provider: isSuccess ? 'openrouter' : 'local',
+          model: result.model || (isSuccess ? 'openrouter/owl-alpha' : 'heuristic-v1'),
+          promptVersion: result.promptVersion || 'v1',
+          inputHash: hash,
+          itemsCount: result.items.length,
+          errorMessage: result.error,
         })
       })
-      setGenerationStatus(
-        aiGenerated
-          ? `✓ ${items.length} AI-generierte Prüfungsfragen erstellt!`
-          : `✓ ${items.length} Template-Fragen erstellt.`
-      )
+
+      if (result.source === 'openrouter') {
+        setGenerationStatus(`✓ ${result.items.length} AI-generierte Prüfungsfragen erstellt!`)
+      } else {
+        if (result.error === 'OpenRouter rate-limited') {
+          setGenerationStatus('OpenRouter rate-limited – Fallback genutzt.')
+        } else {
+          setGenerationStatus('KI gerade nicht verfügbar – lokaler Fallback genutzt.')
+        }
+      }
       setStep('exam-setup')
     } catch (error) {
-      // Fallback to template generation on any error
-      console.warn('AI generation failed, using templates:', error)
-      setGenerationStatus('Fallback: Template-Fragen werden erstellt...')
+      console.warn('AI generation critical failure, using templates:', error)
+      setGenerationStatus('KI gerade nicht verfügbar – lokaler Fallback genutzt.')
       const items = buildItems(docId, subject, clean)
       const newDocument: StudyDocument = {
         id: docId,

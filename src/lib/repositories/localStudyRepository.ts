@@ -1,4 +1,4 @@
-import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, DocumentChunk, ExamProfile, RepositoryStatus, SessionResult, StudyAttempt, StudyDocument, StudyItem } from '../../types'
 import { safeParse, saveJson, storageKeys } from '../storage'
 import type { StudyRepository } from './studyRepository'
 
@@ -18,6 +18,7 @@ export class LocalStudyRepository implements StudyRepository {
       documents: safeParse<StudyDocument[]>(storageKeys.documents, []),
       examProfiles: safeParse<ExamProfile[]>(storageKeys.examProfiles, []),
       results: safeParse<SessionResult[]>(storageKeys.results, []),
+      attempts: safeParse<StudyAttempt[]>(storageKeys.attempts, []),
     }
   }
 
@@ -57,9 +58,16 @@ export class LocalStudyRepository implements StudyRepository {
     // Local mode has no durable audit table; generated items still carry generationSource.
   }
 
+  async saveDocumentChunks(_documentId: string, _chunks: DocumentChunk[]): Promise<void> {
+    // Local mode does not persist raw document chunks to separate localStorage partitions.
+  }
+
   async saveSnapshot(snapshot: AppStateSnapshot): Promise<void> {
     saveJson(storageKeys.documents, snapshot.documents)
     saveJson(storageKeys.examProfiles, snapshot.examProfiles)
     saveJson(storageKeys.results, snapshot.results)
+    if (snapshot.attempts) {
+      saveJson(storageKeys.attempts, snapshot.attempts)
+    }
   }
 }

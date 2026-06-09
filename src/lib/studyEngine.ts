@@ -84,6 +84,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         intervalDays: 0,
         repetitions: 0,
         easeFactor: 2.5,
+        generationSource: 'heuristic-v1' as const,
       },
       {
         id: `${base}-exam`,
@@ -98,6 +99,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         intervalDays: 0,
         repetitions: 0,
         easeFactor: 2.5,
+        generationSource: 'heuristic-v1' as const,
       },
       {
         id: `${base}-task`,
@@ -112,6 +114,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         intervalDays: 0,
         repetitions: 0,
         easeFactor: 2.5,
+        generationSource: 'heuristic-v1' as const,
       },
     ]
   }).slice(0, 36)

@@ -73,6 +73,17 @@ describe('studyEngine', () => {
       const thirdItem = items[2]
       expect(thirdItem.type).toBe('aufgabe')
     })
+
+    it('labels template-generated items with the heuristic generation source', () => {
+      const items = buildItems(
+        'doc-source',
+        'Rechnungswesen',
+        'Aktivkonten mehren sich im Soll und mindern sich im Haben. Passivkonten mehren sich im Haben und mindern sich im Soll.',
+      )
+
+      expect(items.length).toBeGreaterThan(0)
+      expect(items.every((item) => item.generationSource === 'heuristic-v1')).toBe(true)
+    })
   })
 
   describe('nextDueDate', () => {

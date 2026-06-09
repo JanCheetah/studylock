@@ -38,6 +38,7 @@ type DbStudyItem = {
   interval_days: number
   repetitions: number
   last_rating: StudyItem['lastRating'] | null
+  generation_source: StudyItem['generationSource'] | null
 }
 
 type DbSession = {
@@ -156,7 +157,7 @@ export class SupabaseStudyRepository implements StudyRepository {
       interval_days: item.intervalDays,
       repetitions: item.repetitions,
       last_rating: item.lastRating ?? null,
-      generation_source: 'heuristic-v1',
+      generation_source: item.generationSource ?? (item.aiGenerated ? 'openrouter' : 'heuristic-v1'),
     }))
     const { error } = await this.client.from('study_items').upsert(rows)
     if (error) throw error
@@ -233,6 +234,8 @@ export class SupabaseStudyRepository implements StudyRepository {
       repetitions: row.repetitions,
       lastRating: row.last_rating ?? undefined,
       easeFactor: 2.5,
+      generationSource: row.generation_source ?? undefined,
+      aiGenerated: row.generation_source === 'openrouter' || undefined,
     }
   }
 

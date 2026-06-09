@@ -104,6 +104,7 @@ Antworte als JSON Array mit diesem Format:
       repetitions: 0,
       easeFactor: 2.5,
       aiGenerated: true,
+      generationSource: 'openrouter',
     }))
 
     onProgress?.(`✓ ${studyItems.length} AI-Fragen bereit!`)

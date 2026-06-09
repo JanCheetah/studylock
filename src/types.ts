@@ -7,6 +7,7 @@ export type Confidence = 1 | 2 | 3 | 4 | 5
 export type PlanPriority = 'setup' | 'normal' | 'review' | 'panic'
 export type SourceType = 'pdf' | 'txt' | 'md' | 'paste'
 export type StorageMode = 'local' | 'supabase'
+export type GenerationSource = 'openrouter' | 'heuristic-v1'
 
 export type StudyItem = {
   id: string
@@ -23,6 +24,7 @@ export type StudyItem = {
   lastRating?: Rating
   easeFactor: number
   aiGenerated?: boolean
+  generationSource?: GenerationSource
   hint?: string
   aiEvaluation?: string
 }

@@ -10,7 +10,9 @@ export async function generateStudyItemsWithAi(documentId: string, subject: stri
     })
 
     if (error) throw error
-    return Array.isArray(data?.items) && data.items.length ? data.items : null
+    return Array.isArray(data?.items) && data.items.length
+      ? data.items.map((item) => ({ ...item, aiGenerated: true, generationSource: 'openrouter' }))
+      : null
   } catch (error) {
     console.warn('StudyLock AI generation fallback:', error)
     return null

@@ -6,6 +6,15 @@ import { extractFileText } from '../lib/pdf'
 import { persistRepositoryWrite } from '../lib/persist'
 import { generateItemsFromText, isAIAvailable } from '../lib/aiStudyEngine'
 
+const generationInputHash = async (text: string) => {
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+  }
+
+  return `len-${text.length}`
+}
+
 export function useDocuments(
   setStep: (step: Step) => void,
   activeExamProfileId: string | null
@@ -56,7 +65,19 @@ export function useDocuments(
       }
       setDocuments((prev) => [newDocument, ...prev])
       setActiveDocumentId(docId)
-      persistRepositoryWrite((repository) => repository.saveDocument(newDocument))
+      persistRepositoryWrite(async (repository) => {
+        await repository.saveDocument(newDocument)
+        await repository.recordAiGeneration({
+          documentId: docId,
+          status: aiGenerated ? 'succeeded' : 'failed',
+          provider: aiGenerated ? 'openrouter' : 'local',
+          model: aiGenerated ? 'openrouter/optimus-alpha' : 'heuristic-v1',
+          promptVersion: 'study-items-v1',
+          inputHash: await generationInputHash(clean),
+          itemsCount: items.length,
+          errorMessage: aiGenerated ? undefined : 'AI unavailable or failed; heuristic fallback used',
+        })
+      })
       setGenerationStatus(
         aiGenerated
           ? `✓ ${items.length} AI-generierte Prüfungsfragen erstellt!`
@@ -81,7 +102,19 @@ export function useDocuments(
       }
       setDocuments((prev) => [newDocument, ...prev])
       setActiveDocumentId(docId)
-      persistRepositoryWrite((repository) => repository.saveDocument(newDocument))
+      persistRepositoryWrite(async (repository) => {
+        await repository.saveDocument(newDocument)
+        await repository.recordAiGeneration({
+          documentId: docId,
+          status: 'failed',
+          provider: 'local',
+          model: 'heuristic-v1',
+          promptVersion: 'study-items-v1',
+          inputHash: await generationInputHash(clean),
+          itemsCount: items.length,
+          errorMessage: error instanceof Error ? error.message : 'AI generation failed; heuristic fallback used',
+        })
+      })
       setStep('exam-setup')
     } finally {
       setIsGenerating(false)

@@ -43,4 +43,37 @@ describe('SupabaseStudyRepository', () => {
       expect.objectContaining({ id: 'item-local', generation_source: 'heuristic-v1' }),
     ]))
   })
+
+  it('records AI generation audit rows with status, model, prompt version, and item count', async () => {
+    const insert = vi.fn().mockResolvedValue({ error: null })
+    const fakeClient = {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null }),
+      },
+      from: vi.fn(() => ({ insert })),
+    }
+    const repository = new SupabaseStudyRepository(fakeClient as never)
+
+    await repository.recordAiGeneration({
+      documentId: 'doc-1',
+      status: 'succeeded',
+      provider: 'openrouter',
+      model: 'openrouter/horizon-alpha',
+      promptVersion: 'study-items-v1',
+      inputHash: 'hash-1',
+      itemsCount: 7,
+    })
+
+    expect(fakeClient.from).toHaveBeenCalledWith('ai_generations')
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-1',
+      document_id: 'doc-1',
+      status: 'succeeded',
+      model: 'openrouter/horizon-alpha',
+      prompt_version: 'study-items-v1',
+      input_hash: 'hash-1',
+      output: { provider: 'openrouter', items_count: 7 },
+      error_message: null,
+    }))
+  })
 })

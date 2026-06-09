@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js'
-import type { AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
 import { supabase } from '../supabaseClient'
 import type { StudyRepository } from './studyRepository'
 
@@ -177,6 +177,29 @@ export class SupabaseStudyRepository implements StudyRepository {
       readiness_after: result.readinessAfter,
     })
     if (error) throw error
+  }
+
+  async recordAiGeneration(log: AiGenerationLog): Promise<void> {
+    try {
+      const user = await this.requireUser()
+      const { error } = await this.client.from('ai_generations').insert({
+        user_id: user.id,
+        document_id: log.documentId ?? null,
+        chunk_id: log.chunkId ?? null,
+        status: log.status,
+        model: log.model,
+        prompt_version: log.promptVersion,
+        input_hash: log.inputHash,
+        output: {
+          provider: log.provider,
+          items_count: log.itemsCount ?? 0,
+        },
+        error_message: log.errorMessage ?? null,
+      })
+      if (error) throw error
+    } catch (error) {
+      console.warn('StudyLock AI generation audit logging failed:', error)
+    }
   }
 
   async saveSnapshot(snapshot: AppStateSnapshot): Promise<void> {

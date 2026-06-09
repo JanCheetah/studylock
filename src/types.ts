@@ -112,6 +112,20 @@ export type StudyAttempt = {
   createdAt: string
 }
 
+export type AiGenerationStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+
+export type AiGenerationLog = {
+  documentId?: string
+  chunkId?: string
+  status: AiGenerationStatus
+  provider: 'openrouter' | 'local' | 'unknown'
+  model: string
+  promptVersion: string
+  inputHash: string
+  itemsCount?: number
+  errorMessage?: string
+}
+
 export type RepositoryStatus = {
   mode: StorageMode
   configured: boolean

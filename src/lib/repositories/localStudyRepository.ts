@@ -1,4 +1,4 @@
-import type { AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
+import type { AiGenerationLog, AppStateSnapshot, ExamProfile, RepositoryStatus, SessionResult, StudyDocument, StudyItem } from '../../types'
 import { safeParse, saveJson, storageKeys } from '../storage'
 import type { StudyRepository } from './studyRepository'
 
@@ -44,6 +44,10 @@ export class LocalStudyRepository implements StudyRepository {
   async saveSession(result: SessionResult): Promise<void> {
     const results = safeParse<SessionResult[]>(storageKeys.results, [])
     saveJson(storageKeys.results, [result, ...results.filter((item) => item.id !== result.id)].slice(0, 50))
+  }
+
+  async recordAiGeneration(_log: AiGenerationLog): Promise<void> {
+    // Local mode has no durable audit table; generated items still carry generationSource.
   }
 
   async saveSnapshot(snapshot: AppStateSnapshot): Promise<void> {

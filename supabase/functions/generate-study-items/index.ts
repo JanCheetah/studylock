@@ -79,7 +79,7 @@ serve(async (req) => {
       return jsonResponse({ error: 'documentId and at least 80 chars of text are required' }, 400)
     }
 
-    const model = Deno.env.get('OPENROUTER_MODEL') || 'openai/gpt-4o-mini'
+    const model = Deno.env.get('OPENROUTER_MODEL') || 'openrouter/owl-alpha'
     const prompt = `Du bist StudyLock, ein deutscher Klausurtrainer. Erzeuge aus dem Material prüfungsnahe Lernitems.\n\nFach: ${subject}\n\nRegeln:\n- Antworte NUR als JSON-Array, kein Markdown.\n- 12 bis 18 Items.\n- Mische type: karte, quiz, aufgabe.\n- difficulty nur: leicht, mittel, hart.\n- Fragen müssen aktiv abrufen lassen, nicht nur Definitionen.\n- Antworten knapp, aber prüfungstauglich.\n- source als kurzer Quellenhinweis wie "Abschnitt 1".\n\nSchema pro Item:\n{"topic":"...","question":"...","answer":"...","source":"...","difficulty":"leicht|mittel|hart","type":"karte|quiz|aufgabe"}\n\nMaterial:\n${text}`
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {

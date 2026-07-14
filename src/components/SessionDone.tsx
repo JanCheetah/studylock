@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 import { modeLabels, readinessLabel } from '../lib/studyEngine'
 
 function AnimatedNumber({ target, suffix = '' }: { target: number; suffix?: string }) {
@@ -116,7 +116,7 @@ export function SessionDone() {
                   {modeLabels[result.mode]} · {result.minutes} Min · {result.score}%
                 </span>
                 <small>
-                  {result.date} · Readiness {result.readinessAfter}% · Blocker {result.blockers}
+                  {Number.isFinite(Date.parse(result.date)) ? new Date(result.date).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : result.date} · Readiness {result.readinessAfter}% · Blocker {result.blockers}
                 </small>
               </div>
             ))}

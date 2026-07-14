@@ -9,7 +9,9 @@ export const modeLabels: Record<Mode, string> = {
 
 export const sampleText = `Aktivkonten mehren sich im Soll und mindern sich im Haben. Passivkonten mehren sich im Haben und mindern sich im Soll. Die Gewinn- und Verlustrechnung sammelt Aufwendungen und Erträge und zeigt den Periodenerfolg. Buchungssätze folgen dem Prinzip Soll an Haben. Eine Bilanz zeigt Vermögen auf der Aktivseite und Kapital auf der Passivseite. Beim einfachen Simplex-Verfahren werden Entscheidungsvariablen, Zielfunktion und Nebenbedingungen in eine zulässige Ausgangslösung überführt. Opportunitätskosten beschreiben den entgangenen Nutzen der besten nicht gewählten Alternative.`
 
-export function id(_prefix?: string) {
+export function id(prefix?: string) {
+  // Retain the optional argument for compatibility with existing call sites; UUIDs need no prefix.
+  void prefix
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
 
   return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (char) => {
@@ -72,12 +74,11 @@ export function buildItems(documentId: string, subject: string, text: string): S
     const terms = extractTerms(chunk)
     const topic = terms[0] || `Abschnitt ${index + 1}`
     const termLabel = terms.join(', ') || 'Kernkonzept'
-    const base = `${documentId}-${index}`
     const difficulty: Difficulty = chunk.length > 220 ? 'hart' : index % 2 ? 'mittel' : 'leicht'
 
     return [
       {
-        id: `${base}-recall`,
+        id: id(),
         documentId,
         topic,
         question: `Erkläre für ${subject} in eigenen Worten: ${termLabel}`,
@@ -92,7 +93,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         generationSource: 'heuristic-v1' as const,
       },
       {
-        id: `${base}-exam`,
+        id: id(),
         documentId,
         topic,
         question: `Klausurfrage: Wende ${topic} auf ein kurzes Beispiel an und begründe deine Lösung.` ,
@@ -107,7 +108,7 @@ export function buildItems(documentId: string, subject: string, text: string): S
         generationSource: 'heuristic-v1' as const,
       },
       {
-        id: `${base}-task`,
+        id: id(),
         documentId,
         topic,
         question: `Prüfungsdruck: Welche zwei typischen Fehler könnten bei ${topic} passieren?`,
@@ -130,10 +131,11 @@ export function nextDueDate(item: StudyItem, rating: Rating) {
   const ef = item.easeFactor ?? 2.5
 
   // SM-2 ease factor adjustment
-  let newEF = ef
-  if (rating === 'again') newEF = Math.max(1.3, ef - 0.3)
-  else if (rating === 'hard') newEF = Math.max(1.3, ef - 0.15)
-  else newEF = Math.max(1.3, ef + 0.1)
+  const newEF = rating === 'again'
+    ? Math.max(1.3, ef - 0.3)
+    : rating === 'hard'
+      ? Math.max(1.3, ef - 0.15)
+      : Math.max(1.3, ef + 0.1)
 
   let interval: number
   const reps = item.repetitions + (rating === 'again' ? 0 : 1)

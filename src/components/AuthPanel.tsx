@@ -1,4 +1,4 @@
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 
 export function AuthPanel() {
   const {

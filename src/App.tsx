@@ -1,11 +1,13 @@
 import './App.css'
-import { StudyLockProvider, useStudyLock } from './context/StudyLockContext'
+import { StudyLockProvider } from './context/StudyLockContext'
+import { useStudyLock } from './context/studyLockContextValue'
 import { ToastProvider } from './components/Toast'
 import { CommandCenter } from './components/CommandCenter'
 import { MaterialImport } from './components/MaterialImport'
 import { ExamSetup } from './components/ExamSetup'
 import { StudySession } from './components/StudySession'
 import { SessionDone } from './components/SessionDone'
+import { StartupHydrationBarrier } from './components/StartupHydrationBarrier'
 import { modeLabels } from './lib/studyEngine'
 import type { Mode, Step } from './types'
 
@@ -74,7 +76,7 @@ function OnboardingHero({ setStep }: { setStep: (s: Step) => void }) {
   )
 }
 
-function MainApp() {
+function WritableApp() {
   const {
     step,
     setStep,
@@ -230,6 +232,20 @@ function MainApp() {
         </section>
       </section>
     </main>
+  )
+}
+
+function MainApp() {
+  const { hydrated, isHydrating, hydrationError, retryHydration } = useStudyLock()
+  return (
+    <StartupHydrationBarrier
+      hydrated={hydrated}
+      isHydrating={isHydrating}
+      hydrationError={hydrationError}
+      retryHydration={retryHydration}
+    >
+      <WritableApp />
+    </StartupHydrationBarrier>
   )
 }
 

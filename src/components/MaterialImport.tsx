@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 import { sampleText } from '../lib/studyEngine'
 
 export function MaterialImport() {

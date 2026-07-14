@@ -1,15 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
+import { StudyLockContext } from './studyLockContextValue'
 import { useDocuments } from '../hooks/useDocuments'
 import { useExamProfile } from '../hooks/useExamProfile'
 import { useSession } from '../hooks/useSession'
 import { useCloudSync } from '../hooks/useCloudSync'
+import { useStartupHydration } from '../hooks/startupHydration'
 import { safeParse, saveJson, storageKeys } from '../lib/storage'
 import { calculateReadiness, buildTopicStats, buildDailyPlan } from '../lib/studyEngine'
 import type { Step } from '../types'
 
-type StudyLockContextType = ReturnType<typeof useStudyLockState>
-
-const StudyLockContext = createContext<StudyLockContextType | null>(null)
+export type StudyLockContextType = ReturnType<typeof useStudyLockState>
 
 function useStudyLockState() {
   const [step, setStep] = useState<Step>('checkin')
@@ -36,15 +36,18 @@ function useStudyLockState() {
     step,
     setStep,
     docManager.activeDocument,
+    docManager.documents,
     docManager.setDocuments,
     examProfileManager.minutes
   )
 
-  const cloudSyncManager = useCloudSync(
-    docManager.setDocuments,
-    examProfileManager.setExamProfiles,
-    sessionManager.setResults
-  )
+  const hydrationManager = useStartupHydration({
+    setDocuments: docManager.setDocuments,
+    setExamProfiles: examProfileManager.setExamProfiles,
+    setResults: sessionManager.setResults,
+  })
+
+  const cloudSyncManager = useCloudSync()
 
   // Derived states
   const dueCount = docManager.activeDocument
@@ -74,6 +77,9 @@ function useStudyLockState() {
     // Cloud sync hook state and methods
     ...cloudSyncManager,
 
+    // IndexedDB startup state (errors remain visible to the UI/context).
+    ...hydrationManager,
+
     // Derived states
     dueCount,
     readiness,
@@ -86,12 +92,4 @@ function useStudyLockState() {
 export function StudyLockProvider({ children }: { children: React.ReactNode }) {
   const state = useStudyLockState()
   return <StudyLockContext.Provider value={state}>{children}</StudyLockContext.Provider>
-}
-
-export function useStudyLock() {
-  const context = useContext(StudyLockContext)
-  if (!context) {
-    throw new Error('useStudyLock must be used within a StudyLockProvider')
-  }
-  return context
 }

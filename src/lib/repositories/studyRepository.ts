@@ -9,6 +9,7 @@ export type StudyRepository = {
   saveStudyItems(documentId: string, items: StudyItem[]): Promise<void>
   saveSession(result: SessionResult): Promise<void>
   saveStudyAttempts(attempts: StudyAttempt[]): Promise<void>
+  completeSession(result: SessionResult, attempts: StudyAttempt[], updatedItems: StudyItem[]): Promise<void>
   saveDocumentChunks(documentId: string, chunks: DocumentChunk[]): Promise<void>
   recordAiGeneration(log: AiGenerationLog): Promise<void>
   saveSnapshot(snapshot: AppStateSnapshot): Promise<void>

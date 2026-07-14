@@ -5,7 +5,7 @@
 
 import { callOpenRouter, parseAIJson, hasApiKey, type ChatMessage } from './openrouter'
 import type { Difficulty, StudyItem } from '../types'
-import { buildItems } from './studyEngine'
+import { buildItems, id } from './studyEngine'
 
 type AIGeneratedItem = {
   question: string
@@ -91,7 +91,7 @@ Antworte als JSON Array mit diesem Format:
 
     const now = new Date().toISOString()
     const studyItems: StudyItem[] = rawItems.map((item, index) => ({
-      id: `${documentId}-ai-${index}`,
+      id: id(),
       documentId,
       topic: item.topic || `Thema ${index + 1}`,
       question: item.question,

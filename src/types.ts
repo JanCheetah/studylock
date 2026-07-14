@@ -55,6 +55,7 @@ export type ExamProfile = {
 export type SessionResult = {
   id: string
   date: string
+  documentId?: string
   subject: string
   documentTitle: string
   mode: Mode

@@ -20,7 +20,7 @@ export function useDocuments(
   setStep: (step: Step) => void,
   activeExamProfileId: string | null
 ) {
-  const [documents, setDocuments] = useState<StudyDocument[]>(() => safeParse(storageKeys.documents, []))
+  const [documents, setDocuments] = useState<StudyDocument[]>([])
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(() => safeParse<string | null>(storageKeys.activeDocument, null))
   const [documentTitle, setDocumentTitle] = useState('Mein Skript')
   const [material, setMaterial] = useState(sampleText)
@@ -29,7 +29,6 @@ export function useDocuments(
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStatus, setGenerationStatus] = useState('')
 
-  useEffect(() => saveJson(storageKeys.documents, documents), [documents])
   useEffect(() => saveJson(storageKeys.activeDocument, activeDocumentId), [activeDocumentId])
 
   const activeDocument = documents.find((doc) => doc.id === activeDocumentId) ?? null

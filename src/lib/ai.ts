@@ -2,7 +2,17 @@ import type { StudyItem } from '../types'
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { hasApiKey } from './openrouter'
 import { generateItemsFromText } from './aiStudyEngine'
-import { buildItems } from './studyEngine'
+import { buildItems, id } from './studyEngine'
+
+export function normalizeEdgeStudyItems(documentId: string, items: StudyItem[]): StudyItem[] {
+  return items.map((item) => ({
+    ...item,
+    id: id(),
+    documentId,
+    easeFactor: item.easeFactor ?? 2.5,
+    generationSource: 'openrouter' as const,
+  }))
+}
 
 export async function generateStudyItemsWithAi(
   documentId: string,
@@ -67,10 +77,7 @@ export async function generateStudyItemsWithAi(
     if (error) throw error
 
     if (Array.isArray(data?.items) && data.items.length) {
-      const items = data.items.map((item) => ({
-        ...item,
-        generationSource: 'openrouter' as const,
-      }))
+      const items = normalizeEdgeStudyItems(documentId, data.items)
       return {
         items,
         source: 'openrouter',

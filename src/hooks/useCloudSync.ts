@@ -1,14 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { RepositoryStatus, StudyDocument, ExamProfile, SessionResult } from '../types'
+import type { RepositoryStatus } from '../types'
 import { getAuthState, sendMagicLink, signOut, subscribeToAuthChanges, type AuthState } from '../lib/auth'
-import { getRepositoryStatus, getStudyRepository, syncLocalSnapshotToCloud } from '../lib/repositories'
+import { getRepositoryStatus, syncLocalSnapshotToCloud } from '../lib/repositories'
 
 const defaultRepositoryStatus: RepositoryStatus = {
   mode: 'local',
   configured: true,
   authenticated: true,
   label: 'Lokaler Modus',
-  detail: 'Daten liegen im Browser-localStorage. Supabase ist vorbereitet, aber noch nicht aktiv.',
+  detail: 'IndexedDB ist die lokale offline-first Datenquelle.',
 }
 
 const defaultAuthState: AuthState = {
@@ -19,11 +19,7 @@ const defaultAuthState: AuthState = {
   detail: 'Ohne Supabase Env bleibt StudyLock lokal und friend-testbar.',
 }
 
-export function useCloudSync(
-  setDocuments: React.Dispatch<React.SetStateAction<StudyDocument[]>>,
-  setExamProfiles: React.Dispatch<React.SetStateAction<ExamProfile[]>>,
-  setResults: React.Dispatch<React.SetStateAction<SessionResult[]>>
-) {
+export function useCloudSync() {
   const [repositoryStatus, setRepositoryStatus] = useState<RepositoryStatus>(defaultRepositoryStatus)
   const [authState, setAuthState] = useState<AuthState>(defaultAuthState)
   const [authEmail, setAuthEmail] = useState('')
@@ -36,18 +32,13 @@ export function useCloudSync(
       const [status, auth] = await Promise.all([getRepositoryStatus(), getAuthState()])
       setRepositoryStatus(status)
       setAuthState(auth)
-      if (status.mode === 'supabase' && status.authenticated) {
-        const snapshot = await getStudyRepository().then((repository) => repository.loadSnapshot())
-        setDocuments(snapshot.documents)
-        setExamProfiles(snapshot.examProfiles)
-        setResults(snapshot.results)
-      }
+
     } catch (error) {
       setRepositoryStatus(defaultRepositoryStatus)
       setAuthState(defaultAuthState)
       setAuthMessage(error instanceof Error ? error.message : 'Cloud Status konnte nicht geladen werden')
     }
-  }, [setDocuments, setExamProfiles, setResults])
+  }, [])
 
   useEffect(() => {
     void Promise.resolve().then(refreshCloudState)

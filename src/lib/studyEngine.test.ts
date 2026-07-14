@@ -62,6 +62,15 @@ describe('studyEngine', () => {
   })
 
   describe('buildItems', () => {
+    it('creates a fresh V2-compatible UUID for every heuristic item', () => {
+      const documentId = id()
+      const items = buildItems(documentId, 'Math', 'This sentence is deliberately long enough to become a generated study chunk.')
+      expect(items.length).toBeGreaterThan(0)
+      expect(new Set(items.map((item) => item.id)).size).toBe(items.length)
+      expect(items.every((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(item.id))).toBe(true)
+      expect(items.every((item) => item.documentId === documentId)).toBe(true)
+    })
+
     it('should build cards, quizzes, and tasks for a document', () => {
       const docId = 'doc-123'
       const subject = 'Informatik'

@@ -54,11 +54,44 @@ export class LocalStudyRepository implements StudyRepository {
     saveJson(storageKeys.attempts, [...attempts, ...existing.filter((attempt) => !attemptIds.has(attempt.id))].slice(0, 500))
   }
 
+  async completeSession(result: SessionResult, attempts: StudyAttempt[], updatedItems: StudyItem[]): Promise<void> {
+    await this.saveSession(result)
+    await this.saveStudyAttempts(attempts)
+    if (!updatedItems.length) return
+
+    const updatesByDocument = new Map<string, Map<string, StudyItem>>()
+    for (const item of updatedItems) {
+      const documentUpdates = updatesByDocument.get(item.documentId) ?? new Map<string, StudyItem>()
+      documentUpdates.set(item.id, item)
+      updatesByDocument.set(item.documentId, documentUpdates)
+    }
+
+    const documents = safeParse<StudyDocument[]>(storageKeys.documents, [])
+    const mergedDocuments = documents.map((document) => {
+      const updates = updatesByDocument.get(document.id)
+      if (!updates) return document
+
+      const existingIds = new Set(document.items.map((item) => item.id))
+      return {
+        ...document,
+        items: [
+          ...document.items.map((item) => updates.get(item.id) ?? item),
+          ...[...updates.values()].filter((item) => !existingIds.has(item.id)),
+        ],
+        updatedAt: new Date().toISOString(),
+      }
+    })
+    saveJson(storageKeys.documents, mergedDocuments)
+  }
+
   async recordAiGeneration(_log: AiGenerationLog): Promise<void> {
+    void _log
     // Local mode has no durable audit table; generated items still carry generationSource.
   }
 
   async saveDocumentChunks(_documentId: string, _chunks: DocumentChunk[]): Promise<void> {
+    void _documentId
+    void _chunks
     // Local mode does not persist raw document chunks to separate localStorage partitions.
   }
 

@@ -1,13 +1,104 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Mode, StudyItem, Rating, SessionResult, StudyDocument, Step } from '../types'
-import { safeParse, saveJson, storageKeys } from '../lib/storage'
 import { selectSessionItems, nextDueDate, calculateReadiness, buildStudyAttempts, id } from '../lib/studyEngine'
-import { persistRepositoryWrite } from '../lib/persist'
+import { getStudyRepository } from '../lib/repositories'
+import type { StudyRepository } from '../lib/repositories/studyRepository'
+
+export function applyFinalRatingsToDocuments(
+  documents: StudyDocument[],
+  documentId: string,
+  ratings: Record<string, Rating>,
+  schedule: typeof nextDueDate = nextDueDate,
+): StudyDocument[] {
+  return documents.map((document) => document.id !== documentId ? document : {
+    ...document,
+    items: document.items.map((item) => {
+      const rating = ratings[item.id]
+      return rating ? { ...item, ...schedule(item, rating) } : item
+    }),
+  })
+}
+
+export type CompletionCommand = {
+  result: SessionResult
+  attempts: ReturnType<typeof buildStudyAttempts>
+  finalDocuments: StudyDocument[]
+  finalItems: StudyItem[]
+}
+
+type CreateCompletionCommandInput = {
+  activeDocument: StudyDocument
+  documents: StudyDocument[]
+  mode: Mode
+  sessionScore: number
+  sessionMinutes: number
+  answeredCount: number
+  blockerCount: number
+  items: StudyItem[]
+  answers: Record<string, string>
+  ratings: Record<string, Rating>
+  elapsedSeconds: number
+  finishedAt: string
+  sessionId: string
+}
+
+export function createCompletionCommand(input: CreateCompletionCommandInput): CompletionCommand {
+  const finalDocuments = applyFinalRatingsToDocuments(
+    input.documents,
+    input.activeDocument.id,
+    input.ratings,
+  )
+  const finalDocument = finalDocuments.find(({ id: documentId }) => documentId === input.activeDocument.id)!
+  const attempts = buildStudyAttempts({
+    sessionId: input.sessionId,
+    items: input.items,
+    answers: input.answers,
+    ratings: input.ratings,
+    elapsedSeconds: input.elapsedSeconds,
+    now: input.finishedAt,
+  })
+  const attemptedIds = new Set(attempts.map((attempt) => attempt.studyItemId))
+  const finalItems = finalDocument.items.filter((item) => attemptedIds.has(item.id))
+  const result: SessionResult = {
+    id: input.sessionId,
+    date: input.finishedAt,
+    documentId: input.activeDocument.id,
+    subject: input.activeDocument.subject,
+    documentTitle: input.activeDocument.title,
+    mode: input.mode,
+    score: input.sessionScore,
+    minutes: input.sessionMinutes,
+    answered: input.answeredCount,
+    blockers: input.blockerCount,
+    readinessAfter: calculateReadiness(finalDocument.items),
+  }
+  return { result, attempts, finalDocuments, finalItems }
+}
+
+export async function persistCompletedSession(
+  repository: Pick<StudyRepository, 'completeSession'>,
+  result: SessionResult,
+  attempts: ReturnType<typeof buildStudyAttempts>,
+  finalItems: StudyItem[],
+): Promise<void> {
+  const attemptedIds = new Set(attempts.map((attempt) => attempt.studyItemId))
+  await repository.completeSession(result, attempts, finalItems.filter((item) => attemptedIds.has(item.id)))
+}
+
+export async function commitCompletionCommand(
+  repository: Pick<StudyRepository, 'completeSession'>,
+  command: CompletionCommand,
+  publish: (completed: CompletionCommand) => void,
+): Promise<void> {
+  await persistCompletedSession(repository, command.result, command.attempts, command.finalItems)
+  publish(command)
+}
 
 export function useSession(
   step: Step,
   setStep: (step: Step) => void,
   activeDocument: StudyDocument | null,
+  documents: StudyDocument[],
   setDocuments: React.Dispatch<React.SetStateAction<StudyDocument[]>>,
   profileMinutes: number
 ) {
@@ -20,10 +111,12 @@ export function useSession(
   const [blockerCount, setBlockerCount] = useState(0)
   const [startedAt, setStartedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
-  const [results, setResults] = useState<SessionResult[]>(() => safeParse(storageKeys.results, []))
+  const [results, setResults] = useState<SessionResult[]>([])
   const [sessionMinutes, setSessionMinutes] = useState(25)
-
-  useEffect(() => saveJson(storageKeys.results, results), [results])
+  const [isFinishing, setIsFinishing] = useState(false)
+  const [sessionSaveError, setSessionSaveError] = useState('')
+  const pendingCompletionRef = useRef<CompletionCommand | null>(null)
+  const finishingRef = useRef(false)
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 1000)
@@ -43,6 +136,8 @@ export function useSession(
     setCurrentIndex(0)
     setAnswers({})
     setRatings({})
+    setSessionSaveError('')
+    pendingCompletionRef.current = null
     setBlockedReason('')
     setBlockerCount(0)
     setStartedAt(Date.now())
@@ -55,12 +150,6 @@ export function useSession(
 
   const rateItem = (itemId: string, rating: Rating) => {
     setRatings((prev) => ({ ...prev, [itemId]: rating }))
-    const updatedItems = activeDocument?.items.map((item) => item.id === itemId ? { ...item, ...nextDueDate(item, rating) } : item)
-    setDocuments((prev) => prev.map((doc) => ({
-      ...doc,
-      items: doc.items.map((item) => item.id === itemId ? { ...item, ...nextDueDate(item, rating) } : item),
-    })))
-    if (activeDocument && updatedItems) persistRepositoryWrite((repository) => repository.saveStudyItems(activeDocument.id, updatedItems))
   }
 
   const registerBlocker = (reason: string) => {
@@ -84,37 +173,48 @@ export function useSession(
   const remainingSeconds = Math.max(sessionMinutes * 60 - elapsedSeconds, 0)
   const progress = Math.round(((currentIndex + 1) / Math.max(items.length, 1)) * 100)
 
-  const finishSession = () => {
-    if (!activeDocument) return
-    const sessionId = id('session')
-    const finishedAt = new Date().toISOString()
-    const result: SessionResult = {
-      id: sessionId,
-      date: new Date(finishedAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }),
-      subject: activeDocument.subject,
-      documentTitle: activeDocument.title,
+  const finishSession = async () => {
+    if (!activeDocument || finishingRef.current) return
+
+    const command = pendingCompletionRef.current ?? createCompletionCommand({
+      activeDocument,
+      documents,
       mode,
-      score: sessionScore,
-      minutes: sessionMinutes,
-      answered: answeredCount,
-      blockers: blockerCount,
-      readinessAfter: calculateReadiness(activeDocument.items),
-    }
-    const attempts = buildStudyAttempts({
-      sessionId,
+      sessionScore,
+      sessionMinutes,
+      answeredCount,
+      blockerCount,
       items,
       answers,
       ratings,
       elapsedSeconds,
-      now: finishedAt,
+      finishedAt: new Date().toISOString(),
+      sessionId: id('session'),
     })
-    setStartedAt(null)
-    setResults((prev) => [result, ...prev].slice(0, 10))
-    persistRepositoryWrite(async (repository) => {
-      await repository.saveSession(result)
-      await repository.saveStudyAttempts(attempts)
-    })
-    setStep('done')
+    pendingCompletionRef.current = command
+    finishingRef.current = true
+    setIsFinishing(true)
+    setSessionSaveError('')
+
+    try {
+      const repository = await getStudyRepository()
+      await commitCompletionCommand(repository, command, (completed) => {
+        setDocuments(completed.finalDocuments)
+        setResults((prev) => [completed.result, ...prev].slice(0, 10))
+        setStartedAt(null)
+        pendingCompletionRef.current = null
+        setStep('done')
+      })
+    } catch (error) {
+      setSessionSaveError(
+        error instanceof Error
+          ? `Session konnte nicht gespeichert werden: ${error.message}`
+          : 'Session konnte nicht gespeichert werden. Bitte erneut versuchen.',
+      )
+    } finally {
+      finishingRef.current = false
+      setIsFinishing(false)
+    }
   }
 
   return {
@@ -140,6 +240,8 @@ export function useSession(
     setResults,
     sessionMinutes,
     setSessionMinutes,
+    isFinishing,
+    sessionSaveError,
     startSession,
     startPanicSession,
     rateItem,

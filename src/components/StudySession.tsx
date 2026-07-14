@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 import { modeLabels } from '../lib/studyEngine'
 import { evaluateAnswer, generateHint, isAIAvailable } from '../lib/aiStudyEngine'
 
@@ -20,6 +20,12 @@ type AIFeedback = {
 }
 
 export function StudySession() {
+  const { items, currentIndex } = useStudyLock()
+  const questionKey = items[currentIndex]?.id ?? `question-${currentIndex}`
+  return <StudySessionQuestion key={questionKey} />
+}
+
+function StudySessionQuestion() {
   const {
     mode,
     activeDocument,
@@ -36,27 +42,20 @@ export function StudySession() {
     registerBlocker,
     insertMiniAnswer,
     finishSession,
+    isFinishing,
+    sessionSaveError,
   } = useStudyLock()
 
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null)
   const [isEvaluating, setIsEvaluating] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
   const [isLoadingHint, setIsLoadingHint] = useState(false)
-  const [timerWarning, setTimerWarning] = useState(false)
+
 
   const activeItem = items[currentIndex]
   const hasAI = isAIAvailable()
 
-  // Reset AI state when moving to a different question
-  useEffect(() => {
-    setAiFeedback(null)
-    setHint(null)
-  }, [currentIndex])
-
-  // Timer warning when < 60 seconds
-  useEffect(() => {
-    setTimerWarning(remainingSeconds > 0 && remainingSeconds <= 60)
-  }, [remainingSeconds])
+  const timerWarning = remainingSeconds > 0 && remainingSeconds <= 60
 
   const handleAIEvaluate = useCallback(async () => {
     if (!activeItem || !activeDocument) return
@@ -87,7 +86,7 @@ export function StudySession() {
     try {
       const h = await generateHint(activeItem.question, activeItem.answer, activeDocument.subject)
       setHint(h)
-    } catch (error) {
+    } catch {
       setHint('Hinweis konnte nicht geladen werden.')
     } finally {
       setIsLoadingHint(false)
@@ -268,18 +267,25 @@ export function StudySession() {
         </button>
       </div>
 
+      {sessionSaveError && (
+        <div className="nudge" role="alert">
+          <strong>Speichern fehlgeschlagen.</strong> {sessionSaveError} Deine Session bleibt geöffnet; versuche es erneut.
+        </div>
+      )}
       <div className="session-actions">
         <button
           className="secondary"
-          disabled={currentIndex === 0}
+          disabled={currentIndex === 0 || isFinishing}
           onClick={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
         >
           ← Zurück (P)
         </button>
         {currentIndex < items.length - 1 ? (
-          <button onClick={() => setCurrentIndex((prev) => prev + 1)}>Nächste Frage (N) →</button>
+          <button disabled={isFinishing} onClick={() => setCurrentIndex((prev) => prev + 1)}>Nächste Frage (N) →</button>
         ) : (
-          <button onClick={finishSession}>Session abschließen ✓</button>
+          <button disabled={isFinishing} onClick={() => void finishSession()}>
+            {isFinishing ? 'Session wird gespeichert …' : sessionSaveError ? 'Speichern erneut versuchen' : 'Session abschließen ✓'}
+          </button>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 import type { ExamGoal, Confidence } from '../types'
 
 export function ExamSetup() {

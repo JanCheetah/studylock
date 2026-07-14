@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { ExamProfile, ExamGoal, Confidence, StudyDocument, Step } from '../types'
-import { safeParse, saveJson, storageKeys } from '../lib/storage'
 import { persistRepositoryWrite } from '../lib/persist'
 import { id } from '../lib/studyEngine'
 
@@ -19,13 +18,11 @@ export function useExamProfile(
   activeExamProfileId: string | null,
   setActiveExamProfileId: (id: string | null) => void
 ) {
-  const [examProfiles, setExamProfiles] = useState<ExamProfile[]>(() => safeParse(storageKeys.examProfiles, []))
+  const [examProfiles, setExamProfiles] = useState<ExamProfile[]>([])
   const [examDate, setExamDate] = useState(todayPlus(21))
   const [examGoal, setExamGoal] = useState<ExamGoal>('bestehen')
   const [confidence, setConfidence] = useState<Confidence>(2)
   const [minutes, setMinutes] = useState(25)
-
-  useEffect(() => saveJson(storageKeys.examProfiles, examProfiles), [examProfiles])
 
   const activeExamProfile = examProfiles.find((profile) => profile.id === (activeDocument?.examProfileId ?? activeExamProfileId)) ?? null
 

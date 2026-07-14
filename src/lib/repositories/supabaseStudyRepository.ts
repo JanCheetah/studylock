@@ -38,6 +38,7 @@ type DbStudyItem = {
   due_at: string
   interval_days: number
   repetitions: number
+  ease_factor?: number | null
   last_rating: StudyItem['lastRating'] | null
   generation_source: StudyItem['generationSource'] | null
 }
@@ -54,10 +55,23 @@ type DbSession = {
   readiness_after: number
 }
 
+type DbStudyAttempt = {
+  id: string
+  session_id: string
+  study_item_id: string
+  user_answer: string | null
+  rating: StudyAttempt['rating'] | null
+  created_at: string
+}
+
 const textHash = async (text: string) => {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
+
+const isIsoTimestamp = (value: string) =>
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+  && Number.isFinite(Date.parse(value))
 
 export class SupabaseStudyRepository implements StudyRepository {
   private client: SupabaseClient
@@ -96,7 +110,7 @@ export class SupabaseStudyRepository implements StudyRepository {
       itemsByDocument.set(mapped.documentId, [...(itemsByDocument.get(mapped.documentId) ?? []), mapped])
     }
 
-    const mappedAttempts: StudyAttempt[] = (attempts ?? []).map((attempt: any) => ({
+    const mappedAttempts: StudyAttempt[] = ((attempts ?? []) as DbStudyAttempt[]).map((attempt) => ({
       id: attempt.id,
       sessionId: attempt.session_id,
       studyItemId: attempt.study_item_id,
@@ -170,6 +184,7 @@ export class SupabaseStudyRepository implements StudyRepository {
       due_at: item.dueAt,
       interval_days: item.intervalDays,
       repetitions: item.repetitions,
+      ease_factor: item.easeFactor,
       last_rating: item.lastRating ?? null,
       generation_source: item.generationSource ?? (item.aiGenerated ? 'openrouter' : 'heuristic-v1'),
     }))
@@ -178,12 +193,16 @@ export class SupabaseStudyRepository implements StudyRepository {
   }
 
   async saveSession(result: SessionResult): Promise<void> {
+    if (!isIsoTimestamp(result.date)) {
+      throw new Error(`Cannot persist session ${result.id}: date must be an ISO timestamp`)
+    }
     const user = await this.requireUser()
     const { error } = await this.client.from('study_sessions').upsert({
       id: result.id,
       user_id: user.id,
+      document_id: result.documentId ?? null,
       mode: result.mode,
-      finished_at: new Date().toISOString(),
+      finished_at: result.date,
       minutes: result.minutes,
       score: result.score,
       answered: result.answered,
@@ -207,8 +226,14 @@ export class SupabaseStudyRepository implements StudyRepository {
       time_spent_seconds: attempt.timeSpentSeconds ?? null,
       created_at: attempt.createdAt,
     }))
-    const { error } = await this.client.from('study_attempts').insert(rows)
+    const { error } = await this.client.from('study_attempts').upsert(rows, { onConflict: 'id' })
     if (error) throw error
+  }
+
+  async completeSession(result: SessionResult, attempts: StudyAttempt[], updatedItems: StudyItem[]): Promise<void> {
+    await this.saveSession(result)
+    await this.saveStudyAttempts(attempts)
+    if (updatedItems.length) await this.saveStudyItems(updatedItems[0].documentId, updatedItems)
   }
 
   async saveDocumentChunks(documentId: string, chunks: DocumentChunk[]): Promise<void> {
@@ -304,7 +329,7 @@ export class SupabaseStudyRepository implements StudyRepository {
       intervalDays: row.interval_days,
       repetitions: row.repetitions,
       lastRating: row.last_rating ?? undefined,
-      easeFactor: 2.5,
+      easeFactor: row.ease_factor ?? 2.5,
       generationSource: row.generation_source ?? undefined,
       aiGenerated: row.generation_source === 'openrouter' || undefined,
     }
@@ -313,7 +338,8 @@ export class SupabaseStudyRepository implements StudyRepository {
   private mapSession(row: DbSession, document?: DbDocument): SessionResult {
     return {
       id: row.id,
-      date: new Date(row.finished_at).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }),
+      date: row.finished_at,
+      documentId: row.document_id ?? undefined,
       subject: document?.subject ?? 'Cloud Session',
       documentTitle: document?.title ?? 'Cloud Dokument',
       mode: row.mode,

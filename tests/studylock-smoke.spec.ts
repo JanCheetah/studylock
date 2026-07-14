@@ -86,11 +86,19 @@ test('local onboarding and study session flow', async ({ page }) => {
   // Open model answer details
   await page.click('summary:has-text("Musterlösung / Quelle ansehen")');
 
-  // Rate item as good ("Sitzt (3)")
-  await page.click('text=Sitzt (3)');
+  // Rate the first item as good, then complete every remaining item in a
+  // dynamically sized AI/heuristic session before finishing it.
+  await page.getByRole('button', { name: 'Sitzt (3)' }).click();
+
+  const nextQuestion = page.getByRole('button', { name: /Nächste Frage/ });
+  while (await nextQuestion.isVisible()) {
+    await nextQuestion.click();
+    await page.fill('.answer-box', 'Das ist eine weitere ausreichend lange Antwort für den Smoke Test.');
+    await page.getByRole('button', { name: 'Sitzt (3)' }).click();
+  }
 
   // 10. Finish session
-  await page.click('text=Session abschließen');
+  await page.getByRole('button', { name: /Session abschließen/ }).click();
 
   // 11. Now in SessionDone view
   await expect(page.locator('text=4 / Auswertung')).toBeVisible();

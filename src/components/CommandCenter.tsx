@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useStudyLock } from '../context/StudyLockContext'
+import { useStudyLock } from '../context/studyLockContextValue'
 import { modeLabels, readinessLabel, calculateReadiness } from '../lib/studyEngine'
 import { AuthPanel } from './AuthPanel'
 import { AISettingsPanel } from './AISettingsPanel'

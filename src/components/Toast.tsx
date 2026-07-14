@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useState, useCallback } from 'react'
+import { ToastContext } from '../context/ToastContext'
+import type { ToastType } from '../context/ToastContext'
 
-type ToastType = 'success' | 'error' | 'info' | 'warning'
 
 type ToastItem = {
   id: number
@@ -9,15 +10,6 @@ type ToastItem = {
   exiting?: boolean
 }
 
-type ToastContextType = {
-  addToast: (message: string, type?: ToastType) => void
-}
-
-const ToastContext = createContext<ToastContextType>({ addToast: () => {} })
-
-export function useToast() {
-  return useContext(ToastContext)
-}
 
 let toastCounter = 0
 
@@ -53,14 +45,4 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       </div>
     </ToastContext.Provider>
   )
-}
-
-/**
- * Standalone hook: auto-shows a toast when deps change.
- */
-export function useAutoToast(message: string | null, type: ToastType = 'info') {
-  const { addToast } = useToast()
-  useEffect(() => {
-    if (message) addToast(message, type)
-  }, [message, type, addToast])
 }

@@ -49,8 +49,11 @@ test('local onboarding and study session flow', async ({ page }) => {
   // 1. Open home page
   await page.goto('/');
 
-  // 2. Onboarding hero card must be visible on first visit
+  // 2. Onboarding hero card must be visible on first visit with intact UTF-8 copy
   await expect(page.locator('.hero-card.onboarding')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Dein Skript wird ein täglicher Klausurplan.' })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('├');
+  await expect(page.locator('body')).not.toContainText('Γ');
 
   // 3. Click onboarding import button
   await page.click('text=Jetzt Material importieren');

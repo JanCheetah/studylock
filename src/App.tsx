@@ -47,30 +47,30 @@ function OnboardingHero({ setStep }: { setStep: (s: Step) => void }) {
   return (
     <section className="hero-card onboarding">
       <div className="eyebrow">Willkommen bei StudyLock</div>
-      <h1>Dein Skript wird ein t├ñglicher Klausurplan.</h1>
+      <h1>Dein Skript wird ein täglicher Klausurplan.</h1>
       <p>
-        In 3 Schritten von der PDF zur Pr├╝fungsvorbereitung:
-        Material importieren ΓåÆ AI generiert Pr├╝fungsfragen ΓåÆ T├ñglicher Lernplan mit Spaced Repetition.
+        In 3 Schritten von der PDF zur Prüfungsvorbereitung:
+        Material importieren → AI generiert Prüfungsfragen → Täglicher Lernplan mit Spaced Repetition.
       </p>
       <div className="onboarding-steps">
         <div className="onboarding-step">
-          <span className="onboarding-icon">≡ƒôä</span>
+          <span className="onboarding-icon">📄</span>
           <strong>1. Material importieren</strong>
           <span>PDF, TXT oder Notizen hochladen</span>
         </div>
         <div className="onboarding-step">
-          <span className="onboarding-icon">≡ƒñû</span>
+          <span className="onboarding-icon">🤖</span>
           <strong>2. AI generiert Fragen</strong>
-          <span>Intelligente Pr├╝fungsfragen aus deinem Stoff</span>
+          <span>Intelligente Prüfungsfragen aus deinem Stoff</span>
         </div>
         <div className="onboarding-step">
-          <span className="onboarding-icon">≡ƒôà</span>
-          <strong>3. T├ñglicher Lernplan</strong>
+          <span className="onboarding-icon">📅</span>
+          <strong>3. Täglicher Lernplan</strong>
           <span>Spaced Repetition bis zur Klausur</span>
         </div>
       </div>
       <div className="hero-actions">
-        <button onClick={() => setStep('material')}>Jetzt Material importieren ΓåÆ</button>
+        <button onClick={() => setStep('material')}>Jetzt Material importieren →</button>
       </div>
     </section>
   )
@@ -104,19 +104,19 @@ function WritableApp() {
       ) : (
         <section className="hero-card">
           <div className="eyebrow">
-            {readiness >= 85 ? '≡ƒÄ» Klausurbereit' : readiness >= 70 ? '≡ƒôê Auf gutem Weg' : readiness >= 40 ? 'ΓÜí Weiter dranbleiben' : '≡ƒöÑ Jetzt erst recht'}
+            {readiness >= 85 ? '🎯 Klausurbereit' : readiness >= 70 ? '📈 Auf gutem Weg' : readiness >= 40 ? '⚡ Weiter dranbleiben' : '🔥 Jetzt erst recht'}
           </div>
           <h1>
             {dailyPlan.priority === 'panic'
-              ? 'Panic Mode ΓÇô Klausur in Sicht!'
+              ? 'Panic Mode – Klausur in Sicht!'
               : dailyPlan.priority === 'setup'
-              ? 'Dein Skript wird ein t├ñglicher Klausurplan.'
+              ? 'Dein Skript wird ein täglicher Klausurplan.'
               : `${dailyPlan.command}`}
           </h1>
           <p>
             {activeDocument
-              ? `${activeDocument.title} ┬╖ ${activeDocument.items.length} Fragen ┬╖ Readiness ${readiness}%`
-              : 'Importiere dein erstes Skript und lass die AI Pr├╝fungsfragen generieren.'}
+              ? `${activeDocument.title} · ${activeDocument.items.length} Fragen · Readiness ${readiness}%`
+              : 'Importiere dein erstes Skript und lass die AI Prüfungsfragen generieren.'}
           </p>
           <div className="hero-actions">
             <button onClick={() => setStep('material')}>Dokument importieren</button>
@@ -147,7 +147,7 @@ function WritableApp() {
                   <span>Heute</span>
                   <strong>{dailyPlan.minutes} Minuten</strong>
                   <small>
-                    {dailyPlan.targetItems} Fragen ┬╖ {modeLabels[dailyPlan.mode]}
+                    {dailyPlan.targetItems} Fragen · {modeLabels[dailyPlan.mode]}
                   </small>
                 </div>
                 <p>{dailyPlan.message}</p>
@@ -162,7 +162,7 @@ function WritableApp() {
                 <strong>{activeDocument?.title ?? 'Kein Dokument aktiv'}</strong>
                 <span>
                   {activeDocument
-                    ? `${activeDocument.subject} ┬╖ ${activeDocument.items.length} Lernitems ┬╖ ${dueCount} f├ñllig`
+                    ? `${activeDocument.subject} · ${activeDocument.items.length} Lernitems · ${dueCount} fällig`
                     : 'Importiere erst Material.'}
                 </span>
               </div>
@@ -182,7 +182,7 @@ function WritableApp() {
                         ? 'Mini-Klausur'
                         : key === 'deepwork'
                         ? 'Eine schwere Aufgabe'
-                        : 'F├ñllige Schw├ñchen'}
+                        : 'Fällige Schwächen'}
                     </span>
                   </button>
                 ))}
@@ -225,7 +225,7 @@ function WritableApp() {
                 Markdown
               </button>
               <button className="secondary danger" onClick={() => deleteDocument(activeDocument.id)}>
-                Dokument l├╢schen
+                Dokument löschen
               </button>
             </div>
           )}
